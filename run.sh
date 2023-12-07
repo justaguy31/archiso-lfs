@@ -1,5 +1,5 @@
 # !/bin/bash
-# run.sh - the main script
+# run.sh - initialization plus formatting the internal storage
 # Copyright (C) 2023 Beloglazov Mark <justaguy3331@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify it under
@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU General Public License along with
 # this program.  If not, see <http://www.gnu.org/licenses/>.
 #
-# run.sh - главный скрипт
+# run.sh - инициализация и форматирование внутреннего носителя
 # Copyright © 2023 Beloglazov Mark <justaguy3331@gmail.com>
 #
 # Эта программа является свободным программным обеспечением: Вы можете
@@ -56,6 +56,8 @@ usage="
 # -s[=var] --save-file[=var]
 # Note that this works only if your internal storage is complete.
 # If not, the script will store the var and wait.
+# Стоить подметить, что опция работает только если внутренний носитель завершён.
+# Если нет, то скрипт сбережёт var на потом и станет ждать.
 
 # -S --stop
 # Cancels the -k option. Might be used in user-created scripts?
@@ -76,7 +78,33 @@ under certain conditions; use `-l' or `--license' options for details.
 определенных условий; для подробной информации используйте параметры `-l' или `--license'. 
 "
 
-test "User user is not allowed to run sudo on localhost"
+error() {
+  echo "Error: " $1
+  exit 1
+}
+
+# Check whether the current user is 'user'
+# Проверка того, используется ли сейчас пользователь 'user'
+if test $(whoami) = "user" then
+  echo "Running as 'user'."
+else
+  error "You must be running this script as 'user'.
+Вы должны запускать данный скрипт через пользователя 'user'."
+fi
+
+# Check whether the script is run with sudo privileges
+# Проверка наличия sudo прав (привилегий).
+sudocheck = $(sudo -l -U user)
+if test "User user is not allowed to run sudo on localhost." != $sudocheck then
+  echo "Running with sudo privileges."
+else
+  error "You must be running this script using `sudo'.
+Вы должны запускать данный скрипт через команду `sudo'."
+fi
+
 #echo "Preparing the internal storage..."
 #echo "Set partition sizes manually or automatically?"
-parted
+echo "Choose a device to format:"
+ls /dev | grep '^sd'
+
+parted --script 
