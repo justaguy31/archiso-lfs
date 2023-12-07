@@ -45,8 +45,7 @@
 # n - print no debugging information (не выводить никакой отладочной информации)
 
 # -h --help
-usage="
-"
+usage=""
 
 # -i --ignore-warnings
 
