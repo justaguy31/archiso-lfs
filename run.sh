@@ -81,28 +81,28 @@ error() {
   exit 1
 }
 
-# Check whether the current user is 'user'
-# Проверка того, используется ли сейчас пользователь 'user'
-if test $(whoami) = "user" then
-  echo "Running as 'user'."
-else
-  error "You must be running this script as 'user'.
-Вы должны запускать данный скрипт через пользователя 'user'."
-fi
-
-# Check whether the script is run with sudo privileges
-# Проверка наличия sudo прав (привилегий).
-sudocheck = $(sudo -l -U user)
-if test "User user is not allowed to run sudo on localhost." != $sudocheck then
-  echo "Running with sudo privileges."
-else
-  error "You must be running this script using `sudo'.
-Вы должны запускать данный скрипт через команду `sudo'."
-fi
+# Check whether the script is being run with sudo privileges
+# Проверка наличия sudo привилегий
+sudocheck = $(whoami)
+case sudocheck in
+  root)
+    echo "Running as sudo."
+  ;;
+  
+  *)
+    error "You must be running this script with sudo privileges.
+Вы должны запускать данный скрипт с sudo привилегиями."
+  ;;
+esac
 
 #echo "Preparing the internal storage..."
 #echo "Set partition sizes manually or automatically?"
 echo "Choose a device to format:"
 ls /dev | grep '^sd'
-
-parted --script 
+read -p "Enter in the name of the device you've chosen
+Введите название устройства, которое Вы выбрали:" devsd
+parteddevice = "/dev/$devsd"
+# Partitioning the internal storage
+# Разбиение внутреннего носителя на разделы
+# https://wiki.archlinux.org/title/Partitioning
+parted --script $parteddevice 
