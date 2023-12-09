@@ -45,7 +45,7 @@
 # n - print no debugging information (не выводить никакой отладочной информации)
 
 # -h --help
-usage=""
+usage=''
 
 # -i --ignore-warnings
 
@@ -63,21 +63,21 @@ usage=""
 
 # -l --license
 
-echo "
+echo '
 run.sh Copyright (C) 2023 Beloglazov Mark <justaguy3331@gmail.com>
 
 This program comes with ABSOLUTELY NO WARRANTY;
-for details use `-l' or `--license' options.
+for details use `-l` or `--license` options.
 This is free software, and you are welcome to redistribute it
-under certain conditions; use `-l' or `--license' options for details.
+under certain conditions; use `-l` or `--license` options for details.
 
 Эта программа поставляется БЕЗ КАКИХ-ЛИБО ГАРАНТИЙ;
-для подробной информации используйте параметры `-l' или `--license'.
+для подробной информации используйте параметры `-l` или `--license`.
 Это свободное программное обеспечение, Вы можете распространять его при соблюдении
-определенных условий; для подробной информации используйте параметры `-l' или `--license'."
+определенных условий; для подробной информации используйте параметры `-l` или `--license`.'
 
 error() {
-  echo "Error: " $1
+  echo 'Error: ' $1
   exit 1
 }
 
@@ -86,22 +86,22 @@ error() {
 sudocheck = $(whoami)
 case sudocheck in
   root)
-    echo "Running as sudo."
+    echo 'Running as sudo.'
   ;;
   
   *)
-    error "You must be running this script with sudo privileges.
-Вы должны запускать данный скрипт с sudo привилегиями."
+    error 'You must be running this script with sudo privileges.
+Вы должны запускать данный скрипт с sudo привилегиями.'
   ;;
 esac
 
 #echo "Preparing the internal storage..."
 #echo "Set partition sizes manually or automatically?"
-echo "Choose a device to format:"
+echo 'Choose a device to format:'
 ls /dev | grep '^sd'
-read -p "Enter in the name of the device you've chosen
-Введите название устройства, которое Вы выбрали:" devsd
-parteddevice = "/dev/$devsd"
+read -p 'Enter in the name of the device you`ve chosen
+Введите название устройства, которое Вы выбрали:' devsd
+parteddevice = '/dev/$devsd'
 # Partitioning the internal storage
 # Разбиение внутреннего носителя на разделы
 # https://wiki.archlinux.org/title/Partitioning
