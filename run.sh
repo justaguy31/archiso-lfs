@@ -39,9 +39,9 @@
 # -d[=var] --debug[=var]
 # a - print everything (выводить всё)
 # b - only print current stage of installation (выводить только текущую стадию установки)
-# v - "b" option with printing current script running, plus current Makefile recipe (опция "b", но ещё с выведением текущего скрипта в работе, а также текущего рецепта Makefile)
-# j - "b" option with printing which sub-commands were invoked and when they exited (опция "b", но ещё с выведением вызовов сторонних программ и когда они завершились)
-# p - "b" option with printing directories the script is currently working at (опция "b", но ещё с выведением директорий, с которыми скрипты на данный момент работают)
+# v - print which scripts and Makefile recipes were invoked and when they exited
+# j - print which sub-commands were invoked and when they exited
+# p - print which directories were invoked and when they were exited
 # n - print no debugging information (не выводить никакой отладочной информации)
 
 # -h --help
