@@ -83,12 +83,11 @@ error() {
 
 # Check whether the script is being run with sudo privileges
 # Проверка наличия sudo привилегий
-sudocheck = $(whoami)
+sudocheck=$(whoami)
 case sudocheck in
   root)
     echo 'Running as sudo.'
   ;;
-  
   *)
     error 'You must be running this script with sudo privileges.
 Вы должны запускать данный скрипт с sudo привилегиями.'
@@ -98,11 +97,14 @@ esac
 #echo "Preparing the internal storage..."
 #echo "Set partition sizes manually or automatically?"
 echo 'Choose a device to format:'
-ls /dev | grep '^sd'
+lsblk
 read -p 'Enter in the name of the device you`ve chosen
-Введите название устройства, которое Вы выбрали:' devsd
-parteddevice = '/dev/$devsd'
+Введите название устройства, которое Вы выбрали:' devdisk
+parteddevice='/dev/$devdisk'
+partedsize=$(lsblk | grep '$devdisk')(?!)
 # Partitioning the internal storage
 # Разбиение внутреннего носителя на разделы
 # https://wiki.archlinux.org/title/Partitioning
-parted --script $parteddevice 
+parted --script $parteddevice mktable gpt
+parted --script $parteddevice mkpart lfs-swap linux-swap 1MiB 501MiB
+parted --script $parteddevice mkpart lfs ext4 501 
