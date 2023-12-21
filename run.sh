@@ -101,10 +101,15 @@ lsblk
 read -p 'Enter in the name of the device you`ve chosen
 Введите название устройства, которое Вы выбрали:' devdisk
 parteddevice='/dev/$devdisk'
-partedsize=$(lsblk | grep '$devdisk')(?!)
+partedsize=`lsblk -b | grep -i '$devdisk' | awk '{print $3}'`
+partedpercentage=`printf %.6f '$((10**6 * $partedsize/100))'`
+partedEFI=$(( 524288000/$partedpercentage ))
+partedlfsmath=$(( 100-$partedEFI ))         # bru, can't use round brackets
+partedlfs=$(( $partedsize/$partedlfsmath )) # блин, нельзя использовать круглые скобки
 # Partitioning the internal storage
 # Разбиение внутреннего носителя на разделы
 # https://wiki.archlinux.org/title/Partitioning
 parted --script $parteddevice mktable gpt
 parted --script $parteddevice mkpart lfs-swap linux-swap 1MiB 501MiB
-parted --script $parteddevice mkpart lfs ext4 501 
+parted --script $parteddevice mkpart lfs ext4 501MiB $partedlfs%
+parted --script $parteddevice mkpart lfs-efi fat32 $partedlfs% 100%
