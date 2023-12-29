@@ -1,0 +1,86 @@
+#! /bin/bash
+# lfs-install - initialization plus formatting the internal storage
+# Copyright (C) 2023 Beloglazov Mark <justaguy3331@gmail.com>
+#
+# This program is free software: you can redistribute it and/or modify it under
+# the terms of the GNU General Public License as published by the Free Software
+# Foundation, either version 3 of the License, or (at your option) any later
+# version.
+#
+# This program is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of  MERCHANTABILITY or FITNESS
+# FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along with
+# this program.  If not, see <http://www.gnu.org/licenses/>.
+# -a[=var] --ask[=var]
+# var:
+# a - everything
+# n - nothing
+
+# -d[=var] --debug[=var]
+# a - print everything
+# b - only print current stage of installation
+# v - print which scripts and Makefile recipes were invoked and when they exited
+# j - print which sub-commands were invoked and when they exited
+# p - print which directories were invoked and when they were exited
+# n - print no debugging information
+
+# -h --help
+usage=''
+
+# -i --ignore-warnings
+
+# -k --keep-going
+# A potentially sadistic option
+
+# -s[=var] --save-file[=var]
+# Note that this works only if your internal storage is complete.
+# If not, the script will store the var and wait.
+
+# -S --stop
+# Cancels the -k option. Might be used in user-created scripts?
+
+# -l --license
+
+echo 'run.sh Copyright (C) 2023 Beloglazov Mark <justaguy3331@gmail.com>
+
+This program comes with ABSOLUTELY NO WARRANTY;
+for details use `-l` or `--license` options.
+This is free software, and you are welcome to redistribute it
+under certain conditions; use `-l` or `--license` options for details.
+'
+
+error() {
+  echo 'Error:' $1
+  exit 1
+}
+
+# Check whether the script is being run with sudo privileges
+sudocheck=$(whoami)
+case $sudocheck in
+  'root')
+    echo 'Running as sudo.'
+  ;;
+  *)
+    error 'You must be running this script with sudo privileges.'
+  ;;
+esac
+
+#echo "Preparing the internal storage..."
+#echo "Set partition sizes manually or automatically?"
+echo 'Choose a device to format:'
+lsblk
+read -p 'Enter in the name of the device you`ve chosen:' devdisk
+parteddevice='/dev/$devdisk'
+partedsize=`lsblk -b | grep -i '$devdisk' | awk '{print $3}'`
+partedpercentage=`printf %.6f '$((10**6 * $partedsize / 100))'`
+partedEFI=`printf %.6f '$((10**6 * 524288000 / $partedpercentage))'`
+partedlfsmath=`printf %.6f '$((10**6 * 100 - $partedEFI))'`          # bru, can't use round brackets
+partedlfs=`printf %.6f '$((10**6 * $partedsize / $partedlfsmath ))'`
+# Partitioning the internal storage
+# https://wiki.archlinux.org/title/Partitioning
+#parted --script $parteddevice mktable gpt
+#parted --script $parteddevice mkpart lfs-swap linux-swap 1MiB 501MiB
+#parted --script $parteddevice mkpart lfs ext4 501MiB $partedlfs%
+#parted --script $parteddevice mkpart lfs-efi fat32 $partedlfs% 100%# man i'm gonna have a lot of work
