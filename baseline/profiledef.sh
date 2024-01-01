@@ -18,8 +18,13 @@ arch="x86_64"
 pacman_conf="pacman.conf"
 airootfs_image_type="erofs"
 airootfs_image_tool_options=('-zlz4hc,12' -E ztailpacking)
-encryption_key="auto"
-persistent_size=10000
+# encryption key mode "auto" is bugged
+# leaving this variable empty prompts for user input
+# WARNING: missing information about acceptable keys
+# "1234" works
+encryption_key=
+# Persistent space in kilobytes (KB)
+persistent_size=30000000
 keys_image_type="erofs"
 keys_image_tool_options=('-zlz4hc,12' -E ztailpacking)
 file_permissions=(
