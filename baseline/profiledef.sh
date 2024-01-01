@@ -24,6 +24,7 @@ airootfs_image_tool_options=('-zlz4hc,12' -E ztailpacking)
 # "1234" works
 encryption_key=
 # Persistent space in kilobytes (KB)
+# 30GB set as a test
 persistent_size=30000000
 keys_image_type="erofs"
 keys_image_tool_options=('-zlz4hc,12' -E ztailpacking)
