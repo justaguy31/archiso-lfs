@@ -12,7 +12,7 @@ on:
         # Friendly description to be shown in the UI instead of 'name'
         description: 'Start building'
         # Default value if no value is explicitly provided
-        default: 'ISO'
+        default: 'default'
         # Input has to be provided for the workflow to run
         required: true
         # The data type of the input
@@ -21,12 +21,15 @@ on:
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
   # This workflow contains a single job called "archbuild"
-  build_full:
+  baseline_iso:
     # The type of runner that the job will run on
     runs-on: self-hosted
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
     # Runs a single command using the runners shell
-    - name: GottaWriteTheSteps
-      run: echo "Hello ${{ inputs.name }}"
+    - name: download-profile
+      run: |
+        pacman -Syu --noconfirm
+        git clone https://github.com/justaguy31/archiso-lfs.git
+        cd archiso-lfs/baseline
