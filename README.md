@@ -1,6 +1,6 @@
 # archiso-lfs
 
-Just a school project based on [Linux From Scratch](https://linuxfromscratch.org/lfs/view/stable/index.html) which may be a good Windows alternative for russians. Basically it's just a giant Bash script that installs Linux From Scratch with additions.  
+Just a school project based on [Linux From Scratch](https://linuxfromscratch.org/lfs/view/stable/index.html). Basically it's just a giant Bash script that installs Linux From Scratch with additions.  
 
 ## How to install
 
