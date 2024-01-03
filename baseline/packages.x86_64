@@ -1,5 +1,4 @@
 base
-cloud-init
 curl
 dhcpcd
 edk2-shell
@@ -7,6 +6,7 @@ git
 hyperv
 iwd
 linux
+linux-firmware
 memtest86+
 mkinitcpio-archiso
 modemmanager
