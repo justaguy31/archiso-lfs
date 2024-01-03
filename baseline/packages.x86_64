@@ -1,9 +1,6 @@
 base
-curl
 dhcpcd
 edk2-shell
-git
-hyperv
 iwd
 linux
 linux-firmware
@@ -18,5 +15,3 @@ qemu-guest-agent
 rp-pppoe
 syslinux
 usb_modeswitch
-virtualbox-guest-utils-nox
-wget
