@@ -22,8 +22,20 @@ airootfs_image_tool_options=('-zlz4hc,12' -E ztailpacking)
 # Leaving the variable empty will prompt the user for the key.
 encryption_key=1234
 # Persistent space in kilobytes (KB)
-# 30GB set as a test
-# Minimal persistent_size allowed: 16748
+# Minimal persistent_size to fix the first problem: 16748
+# Setting it lower causes the following errors:
+#
+# [ kernel/dmsg time] device-mapper: table: 254:0: integrity: Could not initialize superblock (-EINVAL)
+# [ kernel/dmsg time] device-mapper: ioctl: error adding target to table
+# device-mapper: reload ioctl on temporary-cryptsetup-XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX (254:0) failed: Invalid argument
+# Cannot format integrity for device $(workdir)/persistent.ext4
+#
+# X means 16-bit number
+# $(workdir) is full path to the directory your mkarchiso will work at
+
+# Minimal persistent_size to fix the second problem: ≈50000 or ≈60000
+# If 16748=<persistent_size=<50000 then you will see the following error:
+# dd: /dev/mapper/persistent.ext4.map: No space left on device
 persistent_size=16748
 keys_image_type="erofs"
 keys_image_tool_options=('-zlz4hc,12' -E ztailpacking)
