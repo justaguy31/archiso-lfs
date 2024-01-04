@@ -30,7 +30,7 @@ jobs:
     # Runs a single command using the runners shell
     - name: download-profile
       run: |
-        pacman -Syu --noconfirm
+        sudo pacman -Syu --noconfirm
         git clone https://github.com/justaguy31/archiso-lfs.git
         cd archiso-lfs/baseline
     - name: build-iso
