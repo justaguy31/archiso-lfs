@@ -36,4 +36,6 @@ jobs:
     - name: build-iso
       run: |
         pacman -Syu --noconfirm
+        pwd
+        ls -a
         mkarchiso -v ./baseline
