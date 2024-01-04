@@ -36,6 +36,7 @@ jobs:
     - name: build-iso
       run: |
         pacman -Syu --noconfirm
-        pwd
-        ls -a ..
+        cd ..
+        # wtf? why make an empty dir with the same name?
+        rm -r archiso-lfs
         mkarchiso -v ./baseline
