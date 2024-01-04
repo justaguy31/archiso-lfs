@@ -36,7 +36,7 @@ encryption_key=1234
 # Minimal persistent_size to fix the second problem: ≈50000 or ≈60000
 # If 16748=<persistent_size=<50000 then you will see the following error:
 # dd: /dev/mapper/persistent.ext4.map: No space left on device
-persistent_size=16748
+persistent_size=100000
 keys_image_type="erofs"
 keys_image_tool_options=('-zlz4hc,12' -E ztailpacking)
 file_permissions=(
