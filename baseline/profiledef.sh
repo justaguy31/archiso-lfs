@@ -20,7 +20,7 @@ airootfs_image_type="erofs"
 airootfs_image_tool_options=('-zlz4hc,12' -E ztailpacking)
 # Setting encryption_key to `"auto"' will auto-generate the key.
 # Leaving the variable empty will prompt the user for the key.
-encryption_key="1234"
+encryption_key="./keyfile"
 # Persistent space in kilobytes (KB)
 # Minimal persistent_size to fix the first problem: 16748
 # Setting it lower causes the following errors:
