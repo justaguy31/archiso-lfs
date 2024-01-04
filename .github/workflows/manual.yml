@@ -31,6 +31,8 @@ jobs:
     - name: download-profile
       run: |
         pacman -Syu --noconfirm
+        cd ..
+        rm -r archiso-lfs
         git clone https://github.com/justaguy31/archiso-lfs.git
         cd archiso-lfs/baseline
     - name: build-iso
