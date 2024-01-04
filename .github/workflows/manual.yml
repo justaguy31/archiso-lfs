@@ -37,5 +37,5 @@ jobs:
       run: |
         pacman -Syu --noconfirm
         pwd
-        ls -a
+        ls -a ..
         mkarchiso -v ./baseline
