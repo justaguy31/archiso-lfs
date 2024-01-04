@@ -35,5 +35,5 @@ jobs:
        # cd archiso-lfs/baseline
     - name: build-iso
       run: |
-        sudo pacman -Syu --noconfirm
+        pacman -Syu --noconfirm
         mkarchiso -v ./baseline
