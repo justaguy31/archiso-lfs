@@ -1,6 +1,7 @@
 base
 dhcpcd
 edk2-shell
+grub
 iwd
 linux
 linux-firmware
