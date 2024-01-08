@@ -5,6 +5,7 @@ iwd
 linux
 linux-firmware
 memtest86+
+memtest86+-efi
 mkinitcpio-archiso
 modemmanager
 networkmanager
