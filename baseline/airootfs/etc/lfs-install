@@ -58,6 +58,9 @@ error() {
 
 # Check whether the script is being run with sudo privileges
 sudocheck=$(whoami)
+if [-z "$sudocheck"]; then
+  error 'The result of `whoami` is empty. Perhaps your are running in chroot?'
+fi
 case $sudocheck in
   'root')
     echo 'Running as sudo.'
