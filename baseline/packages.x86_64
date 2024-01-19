@@ -16,3 +16,4 @@ qemu-guest-agent
 rp-pppoe
 syslinux
 usb_modeswitch
+usbutils
