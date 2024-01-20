@@ -1,6 +1,7 @@
 base
 dhcpcd
 edk2-shell
+iw
 iwd
 linux
 linux-firmware
@@ -18,3 +19,4 @@ rp-pppoe
 syslinux
 usb_modeswitch
 usbutils
+wireless-tools
