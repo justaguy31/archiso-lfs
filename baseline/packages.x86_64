@@ -10,6 +10,7 @@ memtest86+-efi
 mkinitcpio-archiso
 modemmanager
 nano
+ndiswrapper-dkms
 networkmanager
 open-vm-tools
 openssh
