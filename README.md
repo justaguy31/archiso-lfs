@@ -1,5 +1,7 @@
 # archiso-lfs
 
+*WARNING*: this is a placeholder text which is supposed to give the idea over how README.md will look like in future. The project is not done yet. If it was, then there would've been releases.
+
 Just a school project based on [Linux From Scratch](https://linuxfromscratch.org/lfs/view/stable/index.html).  
 
 ## How to build the ISO
