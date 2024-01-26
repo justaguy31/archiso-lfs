@@ -1,0 +1,168 @@
+#! /bin/bash
+# Initialize network configuration for user and set up pacman.
+success="\e[36m" #cyan color
+warning="\e[1;33m" #yellow color
+error="\e[31m" #red color
+default="\e[0m" #default color (white)
+echo "Starting network configuration."
+echo "Please keep in mind that you can share your Internet connection with your machine"
+echo "if your phone supports a USB modem feature."
+# Check if any network interfaces are present
+interface-check=$(ls /sys/class/net | grep -v lo)
+if [-z "${interface-check}"]; then
+    echo "${error}Error: there are no network interfaces detected.${default}"
+    echo "You may be having trouble with the driver of the device(s)."
+    ${interface-check}='1'
+else
+    echo "${success}The network interface(s) is/are available.${default}"
+    ${interface-check}='0'
+fi
+# If any interface
+case ${interface-check} in
+# not found then
+    '1')
+        ethernet-func(){
+            read -p "Do you have an Ethernet controller? (Y/n):" ethernet-check
+            # If input is empty (user pressed Enter), then
+            if [-z "${ethernet-check}"]; then
+            # take it as a yes
+                ${ethernet-check}='y'
+            fi
+        }
+        ethernet-func
+        invalid-answer(){
+            echo "${error}Answer not recognized.${default}"
+            echo "Please enter a valid answer."
+            $1
+        }
+        check-fail(){
+            echo "${error}Something went wrong while checking your drivers"
+            echo "(\$$1 is not equal to 1 nor 0)."
+            echo "The copy of network-init you have does not seem to function properly,"
+            echo "or the variable was edited by something while this script is working."
+            echo "${default}You might need to obtain a new ISO image of archiso-lfs,"
+            echo "or edit network-init by yourself to the repository version"
+            echo "(see https://github.com/justaguy31/archiso-lfs)."
+        }
+        case ${ethernet-check} in
+            [Yy])
+                ethernet-slot=`lspci | grep -i Ethernet | awk '{print $1}'`
+                ethernet-driver=`lspci -k -s ${ethernet-slot} | grep -E 'Kernel driver in use' | awk '{print $5}'`
+                ethernet-dmesg=`dmesg -L always -l err,warn | grep ${ethernet-driver}`
+                ethernet-chipset=`lspci -s ${ethernet-slot} | awk '{$1=$2=$3=""; print substr($0,4)}'`
+                if [-z "${ethernet-dmesg}"]; then
+                    ethernet-dmesg-check=0
+                else
+                    ethernet-dmesg-check=1
+                fi
+                case ${ethernet-dmesg-check} in
+                    '0')
+                        echo "${success}The Ethernet driver(s) is/are present and loaded in.${default}"
+                        echo "See https://wiki.archlinux.org/title/Network_configuration/Ethernet#Troubleshooting for troubleshooting information,"
+                        echo "or use the command 'ethernet-troubleshoot' to try to automatically fix problems."
+                    ;;
+                    '1')
+                        echo "${error}The Ethernet driver(s) was/were not loaded correctly.${default}"
+                        echo "${warning}You need to know which module is needed for your particular model."
+                        echo "Search the internet for the right module/driver for your chipset"
+                        echo "${default}(card name: '${ethernet-chipset}')${warning}."
+                        echo "Some common modules are 8139too for cards with a Realtek chipset,"
+                        echo "or sis900 for cards with a SiS chipset."
+                        echo "Once you know which module to use, try to load it manually"
+                        echo "${default}(https://wiki.archlinux.org/title/Kernel_module#Manual_module_handling)${warning}."
+                        echo "If you get an error saying that the module was not found,"
+                        echo "verify first if you recently upgraded the kernel"
+                        echo "${default}(see https://wiki.archlinux.org/title/General_troubleshooting#Cannot_use_some_peripherals_after_kernel_upgrade)${warning}."
+                        echo "Alternatively, it is possible that the driver is not included in the Arch kernel."
+                        echo "You may search the AUR for the module name and contact the archiso-lfs maintainer"
+                        echo "for it to get added to the next release."
+                        echo "${default}(see https://github.com/justaguy31/archiso-lfs)"
+                        read -p "Press enter to continue."
+                        echo "dmesg output:"
+                        echo "${ethernet-dmesg}"
+                    ;;
+                    *)
+                        failed-var="{ethernet-dmesg-check}"
+                        check-fail("${failed-var}")
+                esac
+            ;;
+            [Nn])
+            ;;
+            *)
+                invalid-answer(ethernet-func)
+            ;;
+        esac
+        wireless-func(){
+            read -p "Do you have a wireless network? (Y/n):" wireless-check
+            if [-z "wireless-check"]; then
+                ${wireless-check}='y'
+            fi
+        }
+        case ${wireless-check} in
+            [Yy])
+                echo "${warning}Warning: Some wireless chipsets also require firmware, in addition to a corresponding driver."
+                echo "Many firmware images are provided by the linux-firmware package;"
+                echo "however, proprietary firmware images are not included and have to be installed separately.${default}"
+                echo "This is described in https://wiki.archlinux.org/title/Network_configuration/Wireless#Installing_driver/firmware"
+                echo ""
+                read -p "Is your wireless card connected by PCI or USB? (PCI/usb):" lswireless
+                if [-z "$lswireless"]; then
+                    $lswirelesss='pci'
+                fi
+                case $lswireless in
+                    [Pp][Cc][Ii])
+                        wireless-slot=`lspci | grep -i Network | awk '{print $1}'`
+                        wireless-driver=`lspci -k -s ${wireless-slot} | grep -i 'Kernel driver in use' | awk '{print $5}'`
+                    ;;
+                    [Uu][Ss][Bb])
+                        wireless-slot=`lsusb | grep -i Network | awk '{print $1}'`
+                        wireless-driver=`lsusb -k -s ${wireless-slot} | grep -i 'Kernel driver in use' | awk '{print $5}'`
+                    ;;
+                    *)
+                        invalid-answer(wireless-func)
+                    ;;
+                esac
+                wireless-dmesg=`dmesg -l err,warn | grep ${wireless-driver}`
+                if [-z "${wireless-dmesg}"]; then
+                    wireless-dmesg-check=0
+                else
+                    wireless-dmesg-check=1
+                fi
+                case ${wireless-dmesg-check} in
+                    '0')
+                        echo "${success}The wireless driver(s) is/are present and loaded in.${default}"
+                        echo "See https://wiki.archlinux.org/title/Network_configuration/Wireless#Troubleshooting for troubleshooting information,"
+                        echo "or use the command 'wireless-troubleshoot' to try to automatically fix problems."
+                    ;;
+                    '1')
+                        echo "${error}The wireless driver(s) was/were not loaded correctly.${default}"
+                        echo "Check the following lists to discover if your card is supported:"
+                        echo "See https://wireless.wiki.kernel.org/en/users/drivers and follow to the specific driver's page, which contains a list of supported devices."
+                        echo "There is also a List of Wi-Fi Device IDs in Linux (https://wikidevi.wi-cat.ru/List_of_Wi-Fi_Device_IDs_in_Linux)."
+                        echo "https://help.ubuntu.com/community/WifiDocs/WirelessCardsSupported has a good list of wireless cards and whether or not they are supported either in the Linux kernel or by a user-space driver (includes driver name)."
+                        echo "http://linux-wless.passys.nl/ and https://web.archive.org/web/20110711100256/http://www.linuxquestions.org/hcl/index.php?cat=10 also have a good database of kernel-friendly hardware."
+                        echo "Note that some vendors ship products that may contain different chip sets, even if the product identifier is the same."
+                        echo "Only the usb-id (for USB devices) or pci-id (for PCI devices) is authoritative."
+                        echo "If your wireless card is listed above, follow https://wiki.archlinux.org/title/Network_configuration/Wireless#Troubleshooting_drivers_and_firmware,"
+                        echo "which contains information about installing drivers and firmware of some specific wireless cards. Then check the driver status again."
+                        echo "If your wireless card is not listed above, it is likely supported only under Windows (some Broadcom, 3com, etc)."
+                        echo "For these, you can try to use https://wiki.archlinux.org/title/Network_configuration/Wireless#ndiswrapper."
+                        echo "You can also just try running the command 'wireless-troubleshoot' to try to fix problems."
+                    ;;
+                    *)
+                        failed-var="{wireless-dmesg-check}"
+                        check-fail("${failed-var}")
+                    ;;
+                esac
+            ;;
+            [Nn])
+            ;;
+            *)
+                invalid-answer(wireless-func)
+            ;;
+        esac
+    ;;
+# found then
+    '0')
+    ;;
+esac

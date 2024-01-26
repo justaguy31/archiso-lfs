@@ -1,0 +1,6 @@
+#!/bin/sh
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+#gotta edit this later i guess
+#exec lynx 'https://wiki.archlinux.org/title/Installation_guide'
