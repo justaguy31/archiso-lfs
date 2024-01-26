@@ -34,7 +34,7 @@ jobs:
         cd ..
         rm -r archiso-lfs
         git clone https://github.com/justaguy31/archiso-lfs.git
-        cd archiso-lfs/baseline
+        cd archiso-lfs/releng
     - name: build-iso
       run:
-        mkarchiso -v ./baseline
+        mkarchiso -v ./releng
