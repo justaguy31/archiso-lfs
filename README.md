@@ -4,7 +4,9 @@ Just a school project based on [Linux From Scratch](https://linuxfromscratch.org
 
 ## How to build the ISO
 
-Dependencies: [Archlinux](https://archlinux.org), [archiso-persistent](https://aur.archlinux.org/packages/archiso-persistent).
+Dependencies: [Archlinux](https://archlinux.org), [archiso](https://archlinux.org/packages/extra/any/archiso/).
   
-This is mostly a copy of /usr/share/archiso/configs/baseline from [AUR](https://wiki.archlinux.org/title/Arch_User_Repository) package "archiso-persistent",  
-therefore you can follow the Archlinux guide "[Archiso](https://wiki.archlinux.org/title/Archiso)" and [arch-persistent docs](https://gitlab.archlinux.org/tallero/archiso/-/tree/master/docs?ref_type=heads) to configure and build the ISO.  
+This is mostly a copy of /usr/share/archiso/configs/releng from package "archiso",  
+therefore you can follow the Archlinux guide "[Archiso](https://wiki.archlinux.org/title/Archiso)" and [archiso docs](https://gitlab.archlinux.org/archlinux/archiso/-/tree/master/docs?ref_type=heads) to configure and build the ISO.  
+
+Just don't `rm $(releng)/airootfs/usr/local/bin/lfs-install` and you will be able to install Linux From Scratch automatically 🗣🗣💯
