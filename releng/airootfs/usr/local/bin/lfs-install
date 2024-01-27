@@ -58,7 +58,7 @@ error() {
 
 # Check whether the script is being run with sudo privileges
 sudocheck=$(whoami)
-if [-z "$sudocheck"]; then
+if [[ -z "$sudocheck" ]]; then
   error 'The result of `whoami` is empty. Perhaps your are running in chroot?'
 fi
 case $sudocheck in
@@ -73,16 +73,16 @@ esac
 #echo "Preparing the internal storage..."
 #echo "Set partition sizes manually or automatically?"
 echo 'Choose a device to format:'
-lsblk
+lsblk -d
 read -p 'Enter in the name of the device you`ve chosen:' devdisk
 parteddevice='/dev/$devdisk'
 partedsize=`lsblk -b | grep -i '$devdisk' | awk '{print $3}'`
-partedpercentage=`echo '$partedsize/100' | bc -l`
-partedEFI=`echo '524288000/$partedpercentage' | bc -l`
-partedlfs=`echo '$partedsize/(100-$partedEFI)' | bc -l`
+partedpercentage=`echo "$partedsize/100" | bc -l`
+partedEFI=`echo "524288000/$partedpercentage" | bc -l`
+partedlfs=`echo "$partedsize/(100-$partedEFI)" | bc -l`
 # Partitioning the internal storage
 # https://wiki.archlinux.org/title/Partitioning
-#parted --script $parteddevice mktable gpt
-#parted --script $parteddevice mkpart lfs-swap linux-swap 1MiB 501MiB
-#parted --script $parteddevice mkpart lfs ext4 501MiB $partedlfs%
-#parted --script $parteddevice mkpart lfs-efi fat32 $partedlfs% 100%# man i'm gonna have a lot of work
+parted --script $parteddevice mktable gpt
+parted --script $parteddevice mkpart lfs-swap linux-swap 1MiB 501MiB
+parted --script $parteddevice mkpart lfs ext4 501MiB $partedlfs%
+parted --script $parteddevice mkpart lfs-efi fat32 $partedlfs% 100%# man i'm gonna have a lot of work
