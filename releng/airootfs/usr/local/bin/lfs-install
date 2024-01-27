@@ -77,9 +77,9 @@ lsblk -d
 read -p 'Enter in the name of the device you`ve chosen:' devdisk
 parteddevice='/dev/$devdisk'
 partedsize=`lsblk -b | grep -i '$devdisk' | awk '{print $3}'`
-partedpercentage=`echo "$partedsize/100" | bc -l`
-partedEFI=`echo "524288000/$partedpercentage" | bc -l`
-partedlfs=`echo "$partedsize/(100-$partedEFI)" | bc -l`
+partedpercentage=`echo "scale=10; $partedsize / 100" | bc -l`
+partedEFI=`echo "scale=10; 524288000 / $partedpercentage" | bc -l`
+partedlfs=`echo "scale=10; $partedsize / (100 - $partedEFI)" | bc -l`
 # Partitioning the internal storage
 # https://wiki.archlinux.org/title/Partitioning
 parted --script $parteddevice mktable gpt
