@@ -46,9 +46,9 @@ usage=""
 echo "run.sh Copyright (C) 2023 Beloglazov Mark <justaguy3331@gmail.com>
 
 This program comes with ABSOLUTELY NO WARRANTY;
-for details use `-l` or `--license` options.
+for details use '-l' or '--license' options.
 This is free software, and you are welcome to redistribute it
-under certain conditions; use `-l` or `--license` options for details.
+under certain conditions; use '-l' or '--license' options for details.
 "
 
 error() {
@@ -76,13 +76,12 @@ echo "Choose a device to format:"
 lsblk -d
 read -p "Enter in the name of the device you've chosen:" devdisk
 parteddevice="/dev/$devdisk"
-partedsize=`lsblk -d -b | grep -i "$devdisk" | awk "{print $4}"`
-partedpercentage=`echo "scale=10; $partedsize / 100" | bc -l`
-partedEFI=`echo "scale=10; 524288000 / $partedpercentage" | bc -l`
-partedlfs=`echo "scale=10; $partedsize / (100 - $partedEFI)" | bc -l`
+partedsize=`parted --script $parteddevice unit MiB print | grep Disk | awk '{print $3}'`
+partedsize=${partedsize::-3}
+partedlfs=`echo "scale=0; $partedsize - 500" | bc -l`
 # Partitioning the internal storage
 # https://wiki.archlinux.org/title/Partitioning
 parted --script $parteddevice mktable gpt
-parted --script $parteddevice mkpart lfs-swap linux-swap 1MiB 501MiB
-parted --script $parteddevice mkpart lfs ext4 501MiB $partedlfs%
+parted --script $parteddevice mkpart lfs-swap linux-swap 1MiB 512MiB
+parted --script $parteddevice mkpart lfs ext4 512MiB $partedlfs%
 parted --script $parteddevice mkpart lfs-efi fat32 $partedlfs% 100%# man i'm gonna have a lot of work
