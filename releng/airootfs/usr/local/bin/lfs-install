@@ -27,7 +27,7 @@
 # n - print no debugging information
 
 # -h --help
-usage=''
+usage=""
 
 # -i --ignore-warnings
 
@@ -43,40 +43,40 @@ usage=''
 
 # -l --license
 
-echo 'run.sh Copyright (C) 2023 Beloglazov Mark <justaguy3331@gmail.com>
+echo "run.sh Copyright (C) 2023 Beloglazov Mark <justaguy3331@gmail.com>
 
 This program comes with ABSOLUTELY NO WARRANTY;
 for details use `-l` or `--license` options.
 This is free software, and you are welcome to redistribute it
 under certain conditions; use `-l` or `--license` options for details.
-'
+"
 
 error() {
-  echo 'Error:' $1
+  echo "Error:" $1
   exit 1
 }
 
 # Check whether the script is being run with sudo privileges
 sudocheck=$(whoami)
 if [[ -z "$sudocheck" ]]; then
-  error 'The result of `whoami` is empty. Perhaps your are running in chroot?'
+  error "The result of `whoami` is empty. Perhaps your are running in chroot?"
 fi
 case $sudocheck in
-  'root')
-    echo 'Running as sudo.'
+  root)
+    echo "Running as sudo."
   ;;
   *)
-    error 'You must be running this script with sudo privileges.'
+    error "You must be running this script with sudo privileges."
   ;;
 esac
 
 #echo "Preparing the internal storage..."
 #echo "Set partition sizes manually or automatically?"
-echo 'Choose a device to format:'
+echo "Choose a device to format:"
 lsblk -d
-read -p 'Enter in the name of the device you`ve chosen:' devdisk
-parteddevice='/dev/$devdisk'
-partedsize=`lsblk -b | grep -i '$devdisk' | awk '{print $3}'`
+read -p "Enter in the name of the device you've chosen:" devdisk
+parteddevice="/dev/$devdisk"
+partedsize=`lsblk -b | grep -i "$devdisk" | awk "{print $4}"`
 partedpercentage=`echo "scale=10; $partedsize / 100" | bc -l`
 partedEFI=`echo "scale=10; 524288000 / $partedpercentage" | bc -l`
 partedlfs=`echo "scale=10; $partedsize / (100 - $partedEFI)" | bc -l`
