@@ -34,5 +34,5 @@ jobs:
         git pull
     - name: build-iso
       run: |
-        rm -r ./work > /dev/null
+        rm -r -f ./work
         mkarchiso -v ./releng
