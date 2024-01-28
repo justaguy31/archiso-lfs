@@ -2,5 +2,4 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-#gotta edit this later i guess
-#exec lynx 'https://wiki.archlinux.org/title/Installation_guide'
+exec lynx 'https://linuxfromscratch.org/lfs/view/stable/index.html'
