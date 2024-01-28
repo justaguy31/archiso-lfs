@@ -31,7 +31,6 @@ jobs:
     - name: download-profile
       run: |
         pacman -Syu --noconfirm --color always
-        cd ..
         pwd
         ls -a
         git pull
