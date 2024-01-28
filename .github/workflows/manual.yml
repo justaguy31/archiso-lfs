@@ -34,7 +34,6 @@ jobs:
         pwd
         ls -a
         git pull
-        cd archiso-lfs/releng
     - name: build-iso
       run:
         mkarchiso -v ./releng
