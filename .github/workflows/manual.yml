@@ -30,10 +30,10 @@ jobs:
     # Runs a single command using the runners shell
     - name: download-profile
       run: |
+        ls
         pacman -Syu --noconfirm --color always
         cd ..
-        rm -r archiso-lfs
-        git clone --verbose https://github.com/justaguy31/archiso-lfs.git
+        git pull
         cd archiso-lfs/releng
     - name: build-iso
       run:
