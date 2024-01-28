@@ -33,6 +33,6 @@ jobs:
         pacman -Syu --noconfirm --color always
         git pull
     - name: build-iso
-      run:
-        rm -r ./work
+      run: |
+        rm -r ./work > /dev/null
         mkarchiso -v ./releng
