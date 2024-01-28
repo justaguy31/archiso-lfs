@@ -31,9 +31,8 @@ jobs:
     - name: download-profile
       run: |
         pacman -Syu --noconfirm --color always
-        pwd
-        ls -a
         git pull
     - name: build-iso
       run:
+        rm -r ./work
         mkarchiso -v ./releng
