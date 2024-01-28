@@ -83,5 +83,5 @@ partedlfs=`echo "scale=0; $partedsize - 500" | bc -l`
 # https://wiki.archlinux.org/title/Partitioning
 parted --script $parteddevice mktable gpt
 parted --script $parteddevice mkpart lfs-swap linux-swap 1MiB 512MiB
-parted --script $parteddevice mkpart lfs ext4 512MiB $partedlfs%
-parted --script $parteddevice mkpart lfs-efi fat32 $partedlfs% 100%# man i'm gonna have a lot of work
+parted --script $parteddevice mkpart lfs ext4 512MiB ${partedlfs}MiB
+parted --script $parteddevice mkpart lfs-efi fat32 ${partedlfs}MiB 100%
