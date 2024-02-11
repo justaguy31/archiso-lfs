@@ -13,35 +13,82 @@
 #
 # You should have received a copy of the GNU General Public License along with
 # this program.  If not, see <http://www.gnu.org/licenses/>.
-# -a[=var] --ask[=var]
-# var:
-# a - everything
-# n - nothing
 
-# -d[=var] --debug[=var]
+# Color codes for texts
+success="\e[0;96m" # High intensity cyan
+warning="\e[0;93m" # High intensity yellow
+error="\e[0;91m"    # High intensity red
+info="\e[0;97m"    # High intensity white
+default="\e[0m"    # White unless you modify the default shell color
+
+# Read the arguments for lfs-install
+args=$(getopt -a --options a:d:h:i:k:s:l: --long "ask:,debug:,help:,ignore-warnings:,keep-going:,save-file:,license" -- "$@")
+eval set -- "$args"
+
+while true; do
+  case "$1" in
+# -d <var> --debug <var>
 # a - print everything
 # b - only print current stage of installation
 # v - print which scripts and Makefile recipes were invoked and when they exited
 # j - print which sub-commands were invoked and when they exited
-# p - print which directories were invoked and when they were exited
+# p - print which directories were invoked
 # n - print no debugging information
+  -d|--debug)
+    opt-debug="$2"
+    shift 2;;
+# -f --full-save
+  -f|--full-save)
+    opt-full-save="1"
+    shift 1;;
 
 # -h --help
-usage=""
-
-# -i --ignore-warnings
+  *)
+    echo "Usage:"
+    echo " lfs-install [-a <opt-ask>] [-d <opt-debug>] [-h] [-i] [-k] [-s <filename>] [-l]"
+    echo ""
+    echo "Install Linux From Scratch to a desired drive."
+    echo ""
+    echo "Options:"
+    echo " -d, --debug <opt-debug>    filter debug messages by a desired level"
+    echo " -f, --full-save            store all save variables in a savefile, must be used with '-s' option"
+    echo " -h, --help                 display this help and exit"
+    echo " -k, --keep-going           keep going if any error happens, very dangerous option"
+    echo " -s, --save-file <filename> define a filename or path to save file, or start with a new save file"
+    echo " -l, --license              show script license"
+    echo ""
+    echo "The 'opt-debug' argument can be 'a' (all), 'b' (currently active stage, see save variables for names),"
+    echo "'j' (print which sub-commands are currently invoked),"
+    echo "'p' (print which directory is currently invoked),"
+    echo "'n' (print no debugging information)."
+    echo ""
+    echo "The 'filename' argument can be a path to existing savefile, or a path to a new one."
+    echo "lfs-install will prompt user for creating new file (recursively) if it doesn't exist"
+    echo "while also informing of nonexistent directories."
+    exit 0;;
 
 # -k --keep-going
-# A potentially sadistic option
+  -k|--keep-going)
+    opt-keep-going="1"
+    shift 1;;
 
-# -s[=var] --save-file[=var]
+# -s <var> --save-file <var>
 # Note that this works only if your internal storage is complete.
 # If not, the script will store the var and wait.
-
-# -S --stop
-# Cancels the -k option. Might be used in user-created scripts?
+  -s|--save-file)
+    opt-save-file="$2"
+    shift 2;;
 
 # -l --license
+  -l|--license)
+    echo "${info}Please note that you can always exit by pressing 'q'.${default}"
+    read -p "Press enter to continue."
+    less /usr/local/share/doc/lfs-install/LICENSE
+    break;;
+  --)
+    break;;
+  esac
+done
 
 echo "run.sh Copyright (C) 2023 Beloglazov Mark <justaguy3331@gmail.com>
 
@@ -51,37 +98,196 @@ This is free software, and you are welcome to redistribute it
 under certain conditions; use '-l' or '--license' options for details.
 "
 
+# Simple error function to reduce code size
 error() {
-  echo "Error:" $1
+  echo "${error}Error:" $1
   exit 1
 }
+
+# Error that is related to a corrupted save file
+save-error() {
+  echo "${error}Error: this save file is corrupted"
+  echo "(\${$1} is equal to neither 1 or 0).${default}"
+  echo "${info}You might want to edit the save file using 'nano'"
+  echo "(the full location of the save file is ${opt-save-file})."
+  echo "Please note that "1" means the stage is done, and "0" means the stage is not done.${default}"
+  exit 1
+}
+
+# Load save file if it exists
+if [ -f ${opt-save-file} ]; then
+  bash ${opt-save-file}
+else
+  echo "${warning}Save file not found, storing the path to possibly create it later.${default}"
+fi
 
 # Check whether the script is being run with sudo privileges
 sudocheck=$(whoami)
 if [[ -z "$sudocheck" ]]; then
-  error "The result of `whoami` is empty. Perhaps your are running in chroot?"
+  error "The result of `whoami` is empty. Perhaps your are running in chroot?${default}"
 fi
 case $sudocheck in
   root)
-    echo "Running as sudo."
+    echo "${success}Running as sudo (root).${default}"
   ;;
   *)
-    error "You must be running this script with sudo privileges."
+    error "You must be running this script with sudo (root) privileges.${default}"
   ;;
 esac
 
-#echo "Preparing the internal storage..."
-#echo "Set partition sizes manually or automatically?"
-echo "Choose a device to format:"
-lsblk -d
-read -p "Enter in the name of the device you've chosen:" devdisk
-parteddevice="/dev/$devdisk"
-partedsize=`parted --script $parteddevice unit MiB print | grep Disk | awk '{print $3}'`
-partedsize=${partedsize::-3}
-partedlfs=`echo "scale=0; $partedsize - 500" | bc -l`
-# Partitioning the internal storage
-# https://wiki.archlinux.org/title/Partitioning
-parted --script $parteddevice mktable gpt
-parted --script $parteddevice mkpart lfs-swap linux-swap 1MiB 512MiB
-parted --script $parteddevice mkpart lfs ext4 512MiB ${partedlfs}MiB
-parted --script $parteddevice mkpart lfs-efi fat32 ${partedlfs}MiB 100%
+# Save-partitions stage
+if [[ -z "${save-partitions}" ]]; then
+  save-partitions=0
+fi
+case ${save-partitions} in
+  1)
+  ;;
+  0)
+    echo "Choose a device to format:"
+    lsblk -d
+    choose-device() {
+      read -p "Enter in the name of the device you've chosen:" devdisk
+      if [[ -z "`lsblk -d | grep $devdisk`" ]] in
+        echo "${warning}Please enter a valid device name.${default}"
+        choose-device
+      fi
+    }
+    choose-device
+    # Defining variables for the next actions
+    parteddevice="/dev/$devdisk"
+    partedsize=`parted --script $parteddevice unit MiB print | grep Disk | awk '{print $3}'`
+    partedsize=${partedsize::-3}
+    partedlfs=`echo "scale=100; $partedsize - 500" | bc -l`
+    # Partitioning the internal storage
+    # https://wiki.archlinux.org/title/Partitioning
+    parted --script $parteddevice mktable gpt
+    parted --script $parteddevice mkpart lfs-swap linux-swap 1MiB 512MiB
+    parted --script $parteddevice mkpart lfs ext4 512MiB ${partedlfs}MiB
+    parted --script $parteddevice mkpart lfs-efi fat32 ${partedlfs}MiB 100%
+    # Formatting the partitions
+    # https://wiki.archlinux.org/title/Installation_guide#Format_the_partitions
+    mkswap --verbose ${parteddevice}1
+    mkfs.ext4 -v ${parteddevice}2
+    mkfs.fat -v -F 32 ${parteddevice}3
+    echo "save-partitions=1" >> ${opt-save-file}
+  ;;
+  *)
+    save-error "save-partitions"
+esac
+# Save-created stage
+if [[ -z "${save-created}" ]]; then
+  save-created=0
+fi
+# For improving readability
+choose-directory() {
+  echo "Choose a directory to mount $parteddevice to."
+  echo "${info}Note: if you pick a directory with contents,"
+  read -p "'umount ${parteddevice}2' to access them after exiting the script! (/mnt by default):" savelocation
+  if [[ -z "$savelocation" ]]; then
+    savelocation=/mnt
+  fi
+}
+# I regret having to write something that big in an if statement
+if [ ! -f ${opt-save-file} ]; then
+  savelocation=`dirname ${opt-save-file}`
+  savefilename=`basename ${opt-save-file}`
+  if [[ ! -d "$savelocation" ]]; then
+    save-argument-invalid() {
+      echo "${warning}The path you passed in argument does not exist.${default}"
+      read -p "Would you like to create it? ${info}[yes, no, retry]${default} (y/n/R):" createpath
+      if [[ -z "$createpath" ]]; then
+        choose-directory
+      fi
+      case $createpath in
+        [Yy])
+          mkdir $savelocation
+        ;;
+        [Nn])
+          exitorcontinue-func(){
+            read -p "Would you like to exit now or continue running ${warning}(the script will start over upon next run!)${default} (Y/n)?" exitorcontinue
+            if [[ -z "$exitorcontinue" ]]; then
+              exit 1
+            fi
+            case $exitorcontinue in
+              [Yy])
+                exit 1
+              ;;
+              [Nn])
+                echo "Continue running..."
+              ;;
+              *)
+                exitorcontinue-func
+            esac
+          }
+          exitorcontinue-func
+        ;;
+        [Rr])
+          choose-directory
+        ;;
+        *)
+          save-argument-invalid
+      esac
+    }
+  fi
+  fullsavename=${savelocation}/${savefilename}.sh
+  touch $fullsavename
+  echo "save-partitions=1\nsave-created=1\n" > $fullsavename
+  awk -i inplace '!seen[$0]++' $fullsavename
+  sed -i /save-partitions=0/d $fullsavename
+  sed -i /save-created=0/d $fullsavename
+fi
+
+case ${save-created} in
+  1)
+  ;;
+  0)
+    choose-directory
+    if [[ ! -d "$savelocation" ]]; then
+      save-path-invalid() {
+        echo "${warning}The path you entered in does not exist.${default}"
+        read -p "Would you like to create it? ${info}[yes, no, retry]${default} (y/n/R):" createpath
+        if [[ -z "$createpath" ]]; then
+          choose-directory
+        fi
+        case $createpath in
+          [Yy])
+            mkdir $savelocation
+          ;;
+          [Nn])
+            exitorcontinue-func() {
+              read -p "Would you like to exit now or continue running ${warning}(the script will start over upon next run!)${default} (Y/n)?" exitorcontinue
+              if [[ -z "$exitorcontinue" ]]; then
+                exit 1
+              fi
+              case $exitorcontinue in
+                [Yy])
+                  exit 1
+                ;;
+                [Nn])
+                  echo "Continue running..."
+                ;;
+                *)
+                  exitorcontinue-func
+              esac
+            }
+            exitorcontinue-func
+          ;;
+        esac
+      }
+      save-path-invalid
+    fi
+    mount $parteddevice $savelocation
+    read -p "Pick a name for the save file ('lfs-save' by default):" savefilename
+    if [[ -z "$savefilename" ]]; then
+      savefilename=lfs-save
+    fi
+    fullsavename=${savelocation}/${savefilename}.sh
+    touch $fullsavename
+    echo "save-partitions=1\nsave-created=1\n" > $fullsavename
+    awk -i inplace '!seen[$0]++' $fullsavename
+    sed -i /save-partitions=0/d $fullsavename
+    sed -i /save-created=0/d $fullsavename
+  ;;
+  *)
+    save-error "save-created"
+esac
