@@ -36,6 +36,6 @@ jobs:
       run: |
         cd ./work
         shopt -s extglob
-        rm -r !("x86_64")
+        rm -r -f !("x86_64")
         cd ..
         mkarchiso -v ./releng
