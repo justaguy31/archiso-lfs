@@ -120,7 +120,11 @@ save-error() {
 
 # Load save file if it exists
 if [ -f $opt_save_file ]; then
-  source $opt_save_file || true
+  # workaround for error highlighting
+  echo -e "${error}`source $opt_save_file                     || true`${default}"
+  fullsavename=$opt_save_file
+  echo -e "${error}`mount ${savedevice}2 $savelocation        || true`${default}"
+  echo -e "${error}`mount ${savedevice}3 ${savelocation}/boot || true`${default}"
 else
   if [[ ! -z $opt_save_file ]]; then
     echo -e "${warning}Save file not found, storing the path to possibly create it later.${default}"
@@ -160,21 +164,52 @@ case $save_partitions in
     }
     choose-device
     # Defining variables for the next actions
-    parteddevice="/dev/$devdisk"
+    # 'export' just in case, see line 339 (out of this 'case' scope)
+    export parteddevice="/dev/$devdisk"
     if [[ ! -z "`mount | grep $parteddevice`"]]; then
       echo -e "${warning}Warning: this device has one or more mountpoints.${default}"
-      read -p "Would you like to unmount all the partitions of the device? [yes/no/delete] (Y/n/d)" umountbusydevice
-      case $umountbusydevice in
-        [Yy])
-          umount
-      esac
+      umountbusydevice-func() {
+        read -p "Would you like to unmount all the partitions of the device? (Y/n)" umountbusydevice
+        case $umountbusydevice in
+          [Yy])
+            umount ${parteddevice}?*
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            umountbusydevice-func
+        esac
+      }
+      umountbusydevice-func
     fi
     partedsize=`parted --script $parteddevice unit MiB print | grep Disk | awk '{print $3}'`
     partedsize=${partedsize::-3}
     partedlfs=`echo "scale=100; $partedsize - 500" | bc -l`
     # Partitioning the internal storage
     # https://wiki.archlinux.org/title/Partitioning
-    parted --script $parteddevice mktable gpt
+    if [ -d /sys/firmware/efi ]; then
+      echo -e "${info}It appears that your machine has UEFI."
+      echo    "It is usually used with GPT partition table, however,"
+      echo    "there is an older firmware called BIOS, which instead supports only MBR."
+      echo    "UEFI can use that partition table for backwards compatibility,"
+      echo -e "but this is recommended to pick only if you need support for BIOS machines.${default}"
+      partitiontable-func() {
+        read -p "Would you like to use MBR partition table? (y/N)" partitiontable
+        case $partitiontable in
+          [Yy])
+            parted --script $parteddevice mktable mbr
+          ;;
+          [Nn])
+            echo -e "${info}Using GPT partition table.${default}"
+            parted --script $parteddevice mktable gpt
+          ;;
+          *)
+            partitiontable-func
+        esac
+      }
+      partitiontable-func
+    fi
     parted --script $parteddevice mkpart lfs-swap linux-swap 1MiB 512MiB
     parted --script $parteddevice mkpart lfs ext4 512MiB ${partedlfs}MiB
     parted --script $parteddevice mkpart lfs-efi fat32 ${partedlfs}MiB 100%
@@ -185,7 +220,7 @@ case $save_partitions in
     mkfs.fat -v -F 32 ${parteddevice}3
     if [ ! -z $opt_save_file]; then
       if [ -f $opt_save_file ]; then
-        echo "save-partitions=1" >> $opt_save_file
+        echo "save_partitions=1" >> $opt_save_file
       fi
     fi
   ;;
@@ -246,6 +281,7 @@ if [ ! -f $opt_save_file ]; then
           save-argument-invalid
       esac
     }
+    save-argument-invalid
   fi
   fullsavename=${savelocation}/${savefilename}.sh
   touch $fullsavename
@@ -299,12 +335,15 @@ case $save_created in
     if [[ -z "$savefilename" ]]; then
       savefilename=lfs-save
     fi
-    fullsavename=${savelocation}/${savefilename}.sh
-    touch $fullsavename
-    echo -e "save_partitions=1\nsave_created=1\n" > $fullsavename
+    if [[ -z "$fullsavename" ]]; then
+      fullsavename=${savelocation}/${savefilename}.sh
+      touch $fullsavename
+    fi
+    echo -e "savedevice=$parteddevice\nsavelocation=$savelocation\nsave_partitions=1\nsave_created=1\n" > $fullsavename
     awk -i inplace '!seen[$0]++' $fullsavename
     sed -i /save_partitions=0/d $fullsavename
     sed -i /save_created=0/d $fullsavename
+    echo -e "${success}Save file successfully created.${default}"
   ;;
   *)
     save-error "save_created"
