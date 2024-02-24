@@ -28,13 +28,20 @@ jobs:
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
     # Runs a single command using the runners shell
-    - name: download-profile
+    - name: update
       run: |
         pacman -Syu --noconfirm --color always
         git pull
     - name: build-iso
       run: |
+        # Make pacstrap not reinstall up to date packages
+        # (pacstrap is used in mkarchiso).
+        pacstrap_pacman_args_line=`cat -n /bin/pacstrap | grep pacman_args= | awk '{print $1}'
+        sed -i '${pacstrap_pacman_args_line}s/.*/pacman_args=(--needed)/' /bin/pacstrap
+        
         cd ./work
+        # Enable extglob functionality
+        # for deleting everything in 'work' except the 'x86_64' directory
         shopt -s extglob
         rm -r -f !("x86_64")
         cd ..
