@@ -3,6 +3,7 @@ amd-ucode
 arch-install-scripts
 b43-fwcutter
 base
+base-devel
 bcachefs-tools
 bind
 bolt

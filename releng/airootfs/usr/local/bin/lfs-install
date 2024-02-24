@@ -17,7 +17,7 @@ set -e
 # Color codes for texts
 success="\e[0;96m" # High intensity cyan
 warning="\e[0;93m" # High intensity yellow
-error="\e[0;91m"    # High intensity red
+error="\e[0;91m"   # High intensity red
 info="\e[0;97m"    # High intensity white
 default="\e[0m"    # White unless you modify the default shell color
 
@@ -104,7 +104,7 @@ under certain conditions; use '-l' or '--license' options for details.
 
 # Simple error function to reduce code size
 error() {
-  echo "${error}Error:" $1
+  echo -e "${error}Error:" $1
   exit 1
 }
 
@@ -120,11 +120,10 @@ save-error() {
 
 # Load save file if it exists
 if [ -f $opt_save_file ]; then
-  # workaround for error highlighting
-  echo -e "${error}`source $opt_save_file                     || true`${default}"
+  source $opt_save_file
   fullsavename=$opt_save_file
-  echo -e "${error}`mount ${savedevice}2 $savelocation        || true`${default}"
-  echo -e "${error}`mount ${savedevice}3 ${savelocation}/boot || true`${default}"
+  mount ${savedevice}2 $savelocation        || true
+  mount ${savedevice}3 ${savelocation}/boot || true
 else
   if [[ ! -z $opt_save_file ]]; then
     echo -e "${warning}Save file not found, storing the path to possibly create it later.${default}"
@@ -145,7 +144,7 @@ case $sudocheck in
   ;;
 esac
 
-# Save_partitions stage
+# Partitioning stage
 if [[ -z "$save_partitions" ]]; then
   save_partitions=0
 fi
@@ -157,7 +156,7 @@ case $save_partitions in
     lsblk -d
     choose-device() {
       read -p "Enter in the name of the device you've chosen:" devdisk
-      if [[ -z "`lsblk -d | grep $devdisk`" ]]; then
+      if [[ -z "`lsblk -d | grep $devdisk`" || -z "$devdisk" ]]; then
         echo -e "${warning}Please enter a valid device name.${default}"
         choose-device
       fi
@@ -170,6 +169,9 @@ case $save_partitions in
       echo -e "${warning}Warning: this device has one or more mountpoints.${default}"
       umountbusydevice-func() {
         read -p "Would you like to unmount all the partitions of the device? (Y/n)" umountbusydevice
+        if [[ -z "$umountbusydevice" ]]; then
+          umountbusydevice=y
+        fi
         case $umountbusydevice in
           [Yy])
             umount ${parteddevice}?*
@@ -196,6 +198,9 @@ case $save_partitions in
       echo -e "but this is recommended to pick only if you need support for BIOS machines.${default}"
       partitiontable-func() {
         read -p "Would you like to use MBR partition table? (y/N)" partitiontable
+        if [[ -z "$partitiontable" ]]; then
+          partitiontable=n
+        fi
         case $partitiontable in
           [Yy])
             parted --script $parteddevice mktable mbr
@@ -212,100 +217,52 @@ case $save_partitions in
     fi
     parted --script $parteddevice mkpart lfs-swap linux-swap 1MiB 512MiB
     parted --script $parteddevice mkpart lfs ext4 512MiB ${partedlfs}MiB
-    parted --script $parteddevice mkpart lfs-efi fat32 ${partedlfs}MiB 100%
+    parted --script $parteddevice mkpart lfs-efi  fat32  ${partedlfs}MiB 100%
     # Formatting the partitions
     # https://wiki.archlinux.org/title/Installation_guide#Format_the_partitions
-    mkswap --verbose ${parteddevice}1
-    mkfs.ext4 -v ${parteddevice}2
-    mkfs.fat -v -F 32 ${parteddevice}3
-    if [ ! -z $opt_save_file]; then
+    mkswap    --verbose ${parteddevice}1
+    mkfs.ext4 -v        ${parteddevice}2
+    mkfs.fat  -v -F 32  ${parteddevice}3
+    if [ ! -z $opt_save_file ]; then
       if [ -f $opt_save_file ]; then
         echo "save_partitions=1" >> $opt_save_file
       fi
     fi
+    save_partitions=1
   ;;
   *)
     save-error "save_partitions"
 esac
-# Save_created stage
+
+# Save creation stage
 if [[ -z "$save_created" ]]; then
   save_created=0
 fi
 # For improving readability
 choose-directory() {
-  echo "Choose a directory to mount $parteddevice to."
+  echo    "Choose a directory to mount $parteddevice to."
   echo -e "${info}Note: if you pick a directory with contents,"
   read -p "'umount ${parteddevice}2' to access them after exiting the script! (/mnt by default):" savelocation
   if [[ -z "$savelocation" ]]; then
     savelocation=/mnt
   fi
 }
+save-argument() {
 # I regret having to write something that big in an if statement
-if [ ! -f $opt_save_file ]; then
-  savelocation=`dirname $opt_save_file`
-  savefilename=`basename $opt_save_file`
-  if [[ ! -d "$savelocation" ]]; then
-    save-argument-invalid() {
-      echo -e "${warning}The path you passed in argument does not exist.${default}"
-      read -p "Would you like to create it? [yes, no, retry] (y/n/R):" createpath
-      if [[ -z "$createpath" ]]; then
-        choose-directory
-      fi
-      case $createpath in
-        [Yy])
-          mkdir $savelocation
-        ;;
-        [Nn])
-          exitorcontinue-func(){
-            read -p "Would you like to exit now or continue running (the script will start over upon next run!) (Y/n)?" exitorcontinue
-            if [[ -z "$exitorcontinue" ]]; then
-              exit 1
-            fi
-            case $exitorcontinue in
-              [Yy])
-                exit 1
-              ;;
-              [Nn])
-                echo "Continue running..."
-              ;;
-              *)
-                exitorcontinue-func
-            esac
-          }
-          exitorcontinue-func
-        ;;
-        [Rr])
-          choose-directory
-        ;;
-        *)
-          save-argument-invalid
-      esac
-    }
-    save-argument-invalid
-  fi
-  fullsavename=${savelocation}/${savefilename}.sh
-  touch $fullsavename
-  echo "save_partitions=1\nsave_created=1\n" > $fullsavename
-  awk -i inplace '!seen[$0]++' $fullsavename
-  sed -i /save_partitions=0/d $fullsavename
-  sed -i /save_created=0/d $fullsavename
-fi
-
-case $save_created in
-  1)
-  ;;
-  0)
-    choose-directory
+  if [ ! -f $opt_save_file ]; then
+    savelocation=`dirname  $opt_save_file`
+    savefilename=`basename $opt_save_file`
     if [[ ! -d "$savelocation" ]]; then
-      save-path-invalid() {
-        echo -e "${warning}The path you entered in does not exist.${default}"
+      save-argument-invalid() {
+        echo -e "${warning}The path you passed in argument does not exist.${default}"
         read -p "Would you like to create it? [yes, no, retry] (y/n/R):" createpath
         if [[ -z "$createpath" ]]; then
           choose-directory
+          save-argument
         fi
         case $createpath in
           [Yy])
-            mkdir $savelocation
+            mkdir -pv $savelocation
           ;;
           [Nn])
             exitorcontinue-func() {
@@ -326,25 +283,169 @@ case $save_created in
             }
             exitorcontinue-func
           ;;
+          [Rr])
+            choose-directory
+            directory-arg-invalid
+          ;;
+          *)
+            save-argument-invalid
         esac
       }
-      save-path-invalid
+      save-argument-invalid
     fi
+    fullsavename=${savelocation}/${savefilename}.sh
+    touch $fullsavename
+    echo "savedevice=$parteddevice\nsavelocation=$savelocation\nsave_partitions=1\nsave_created=1\n" > $fullsavename
+    awk -i inplace '!seen[$0]++' $fullsavename
+    sed -i /save_partitions=0/d  $fullsavename
+    sed -i /save_created=0/d     $fullsavename
+    save_created=1
+  fi
+}
+save-argument
+
+case $save_created in
+  1)
+  ;;
+  0)
+    choose-directory
+    path-check() {
+      if [[ ! -d "$savelocation" ]]; then
+        save-path-invalid() {
+          echo -e "${warning}The path you entered in does not exist.${default}"
+          read -p "Would you like to create it? [yes, no, retry] (y/n/R):" createpath
+          if [[ -z "$createpath" ]]; then
+            choose-directory
+            path-check
+          fi
+          case $createpath in
+            [Yy])
+              mkdir $savelocation
+            ;;
+            [Nn])
+              exitorcontinue-func() {
+                read -p "Would you like to exit now or continue running (the script will start over upon next run!) (Y/n)?" exitorcontinue
+                if [[ -z "$exitorcontinue" ]]; then
+                  exit 1
+                fi
+                case $exitorcontinue in
+                  [Yy])
+                    exit 1
+                  ;;
+                  [Nn])
+                    echo "Continue running..."
+                  ;;
+                  *)
+                    exitorcontinue-func
+                esac
+              }
+              exitorcontinue-func
+            ;;
+            [Rr])
+              choose-directory
+              path-check
+            ;;
+            *)
+            save-path-invalid
+          esac
+        }
+        save-path-invalid
+      fi
+    }
+    path-check
     mount ${parteddevice}2 $savelocation
-    read -p "Pick a name for the save file ('lfs-save' by default):" savefilename
+    read  -p "Pick a name for the save file ('lfs-save' by default):" savefilename
     if [[ -z "$savefilename" ]]; then
       savefilename=lfs-save
     fi
     if [[ -z "$fullsavename" ]]; then
       fullsavename=${savelocation}/${savefilename}.sh
+    fi
+    if [ ! -f $fullsavename ]; then
       touch $fullsavename
     fi
-    echo -e "savedevice=$parteddevice\nsavelocation=$savelocation\nsave_partitions=1\nsave_created=1\n" > $fullsavename
-    awk -i inplace '!seen[$0]++' $fullsavename
-    sed -i /save_partitions=0/d $fullsavename
-    sed -i /save_created=0/d $fullsavename
+    # Saving the progress in the save file
+    echo -e "savedevice=$parteddevice\nsavelocation=$savelocation\nsave_partitions=1\nsave_created=1\n" > $fullsavename # write certain variables to save file
+    awk  -i inplace '!seen[$0]++' $fullsavename # remove duplicates of lines
+    sed  -i /save_partitions=0/d  $fullsavename # remove "save_partitions=0" line if present
+    sed  -i /save_created=0/d     $fullsavename # remove "save_created=0" line if present
     echo -e "${success}Save file successfully created.${default}"
   ;;
   *)
     save-error "save_created"
+esac
+
+# Preparing the system stage
+case $save_build_preparation in
+  1)
+  ;;
+  0)
+    # Chapter 3
+    mkdir -pv ${savelocation}/sources
+    # Chapter 4
+    mkdir -pv ${savelocation}/{etc,var} ${savelocation}/usr/{bin,lib,sbin}
+    for i in bin lib sbin; do
+      ln -sv usr/$i ${savelocation}/$i
+    done
+    case $(uname -m) in
+      x86_64)
+        mkdir -pv ${savelocation}/lib64
+      ;;
+    esac
+    mkdir -pv ${savelocation}/tools
+    
+    echo -e "save_build_preparation=1\n" > $fullsavename
+    awk  -i inplace '!seen[$0]++'          $fullsavename
+    sed  -i /save_build_preparation=0/d    $fullsavename
+    echo -e "${success}System successfully prepared.${default}"
+  ;;
+  *)
+    save-error "save_build_preparation"
+esac
+
+# Installing cross binutils stage
+case $save_cross_binutils in
+  1)
+  ;;
+  0)
+    binutils_dir=${savelocation}/sources/binutils
+    mkdir -pv $binutils_dir
+    curl --verbose https://ftp.gnu.org/gnu/binutils/binutils-2.42.tar.xz --output ${binutils_dir}/binutils-2.42.tar.xz
+    checksum=`sha512sum binutils-2.42.tar.xz`
+    if [ $checksum -ne `echo /etc/lfs-install/binutils.sha512` ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of binutils-2.42.tar.xz does not match the trusted one."
+      echo    "This means that the package was updated recently, or the repository was attacked."
+      echo -e "The tarball 'binutils-2.42.tar.xz' might have malicious content inside.${default}"
+      binutils_invalid_func() {
+        read -p "Proceed anyway? (y,N):" binutils_invalid
+        if [[ -z "$binutils_invalid" ]]; then
+          $binutils_invalid=n
+        fi
+        case $binutils_invalid in
+          [Yy])
+            echo -e "${warning}Building unsafe Binutils.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            binutils_invalid_func
+        esac
+      }
+      binutils_invalid_func
+    fi
+    mkdir -pv ${binutils_dir}/binutils-2.42
+    tar -xvf binutils-2.42.tar.xz ${binutils_dir}/binutils-2.42
+    mkdir -pv ${binutils_dir}/build
+    ${binutils_dir}/binutils-2.42/configure --prefix=${savelocation}/tools     \
+                                            --with-sysroot=$savelocation       \
+                                            --target=$(uname -m)-lfs-linux-gnu \
+                                            --disable-nls                      \
+                                            --enable-gprofng=no                \
+                                            --disable-werror
+    make -C ${binutils_dir}/binutils-2.42/
+    make -C ${binutils_dir}/binutils-2.42/ install
+  ;;
+  *)
+    save-error "save_cross_binutils"
 esac
