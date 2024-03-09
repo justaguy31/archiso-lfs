@@ -49,7 +49,7 @@ while true; do
 # -h --help
   -h|--help)
     echo "Usage:"
-    echo " lfs-install [-d <opt_debug>] [-h] [-i] [-k] [-s <filename>] [-l]"
+    echo " lfs-install [-d <opt_debug>] [-h] [-j] [-i] [-k] [-s <filename>] [-l]"
     echo ""
     echo "Install Linux From Scratch to a desired drive."
     echo ""
@@ -57,6 +57,7 @@ while true; do
     echo " -d, --debug <opt_debug>    filter debug messages by a desired level"
     echo " -f, --full-save            store all save variables in a savefile"
     echo " -h, --help                 display this help and exit"
+    echo " -j, --one-job              do not use 'make -j\$(nproc)' option while building, should be used for debugging"
     echo " -k, --keep-going           keep going if any error happens, very dangerous option"
     echo " -s, --save-file <filename> define a filename or path to save file, or start with a new save file"
     echo " -l, --license              show script license"
@@ -70,6 +71,11 @@ while true; do
     echo "lfs-install will prompt user for creating new file (recursively) if it doesn't exist"
     echo "while also informing of nonexistent directories."
     exit 0;;
+
+# -j --one-job
+  -j|--one-job)
+    opt_one_job=1
+    shift 1;;
 
 # -k --keep-going
   -k|--keep-going)
@@ -94,7 +100,7 @@ while true; do
   esac
 done
 
-echo "run.sh Copyright (C) 2023 Beloglazov Mark <justaguy3331@gmail.com>
+echo "lfs-install Copyright (C) 2023 Beloglazov Mark <justaguy3331@gmail.com>
 
 This program comes with ABSOLUTELY NO WARRANTY;
 for details use '-l' or '--license' options.
@@ -119,7 +125,7 @@ save-error() {
 }
 
 # Load save file if it exists
-if [ -f $opt_save_file ]; then
+if [[ -f $opt_save_file && ! -z "$opt_save_file" ]]; then
   source $opt_save_file
   fullsavename=$opt_save_file
   mount ${savedevice}2 $savelocation        || true
@@ -133,11 +139,11 @@ fi
 # Check whether the script is being run with sudo privileges
 sudocheck=$(whoami)
 if [[ -z "$sudocheck" ]]; then
-  error "The result of `whoami` is empty. Perhaps your are running in chroot?${default}"
+  error "The result of 'whoami' is empty. Perhaps your are running in chroot?${default}"
 fi
 case $sudocheck in
   root)
-    echo -e"${success}Running as sudo (root).${default}"
+    echo -e "${success}Running as sudo (root).${default}"
   ;;
   *)
     error "You must be running this script with sudo (root) privileges.${default}"
@@ -156,7 +162,7 @@ case $save_partitions in
     lsblk -d
     choose-device() {
       read -p "Enter in the name of the device you've chosen:" devdisk
-      if [[ -z "`lsblk -d | grep $devdisk`" || -z "$devdisk" ]]; then
+      if [[ -z "`lsblk -d | grep $devdisk | awk '{print $1}'`" || "$devdisk" = "loop0" || "$devdisk" = "sr0" ]]; then
         echo -e "${warning}Please enter a valid device name.${default}"
         choose-device
       fi
@@ -165,7 +171,7 @@ case $save_partitions in
     # Defining variables for the next actions
     # 'export' just in case, see line 339 (out of this 'case' scope)
     export parteddevice="/dev/$devdisk"
-    if [[ ! -z "`mount | grep $parteddevice`"]]; then
+    if [[ ! -z "`mount | grep $parteddevice`" ]]; then
       echo -e "${warning}Warning: this device has one or more mountpoints.${default}"
       umountbusydevice-func() {
         read -p "Would you like to unmount all the partitions of the device? (Y/n)" umountbusydevice
@@ -174,7 +180,7 @@ case $save_partitions in
         fi
         case $umountbusydevice in
           [Yy])
-            umount ${parteddevice}?*
+            umount -v ${parteddevice}?* || true
           ;;
           [Nn])
             exit 1
@@ -201,13 +207,31 @@ case $save_partitions in
         if [[ -z "$partitiontable" ]]; then
           partitiontable=n
         fi
+        decide-swap-size() {
+          echo -e "${info}Many machines need a swap partition (roughly pagefile), which is used by RAM."
+          echo    "When it starts to fill up, the operating system moves less frequently used processes or data"
+          echo -e "from RAM to the swap partition.${default}"
+          read -p "Choose the size of the swap partition (at least '2GB' is recommended, IEC (*bibytes) units are also supported):" swapsize
+          if [[ -z "$swapsize" ]]; then
+            decide-swap-size
+          fi
+        }
         case $partitiontable in
           [Yy])
-            parted --script $parteddevice mktable mbr
+            echo -e "${info}Using MBR partition table.${default}"
+            parted --script $parteddevice mktable msdos
+            decide-swap-size
+            parted --script $parteddevice mkpart  primary  linux-swap 1MiB            $swapsize       || decide-swap-size
+            parted --script $parteddevice mkpart  primary  ext4       $swapsize       ${partedlfs}MiB || decide-swap-size
+            parted --script $parteddevice mkpart  primary  fat32      ${partedlfs}MiB 100%
           ;;
           [Nn])
             echo -e "${info}Using GPT partition table.${default}"
             parted --script $parteddevice mktable gpt
+            decide-swap-size
+            parted --script $parteddevice mkpart  lfs-swap linux-swap 1MiB            $swapsize       || decide-swap-size
+            parted --script $parteddevice mkpart  lfs      ext4       $swapsize       ${partedlfs}MiB || decide-swap-size
+            parted --script $parteddevice mkpart  lfs-efi  fat32      ${partedlfs}MiB 100%
           ;;
           *)
             partitiontable-func
@@ -215,9 +239,6 @@ case $save_partitions in
       }
       partitiontable-func
     fi
-    parted --script $parteddevice mkpart lfs-swap linux-swap 1MiB 512MiB
-    parted --script $parteddevice mkpart lfs ext4 512MiB ${partedlfs}MiB
-    parted --script $parteddevice mkpart lfs-efi  fat32  ${partedlfs}MiB 100%
     # Formatting the partitions
     # https://wiki.archlinux.org/title/Installation_guide#Format_the_partitions
     mkswap    --verbose ${parteddevice}1
@@ -225,10 +246,13 @@ case $save_partitions in
     mkfs.fat  -v -F 32  ${parteddevice}3
     if [ ! -z $opt_save_file ]; then
       if [ -f $opt_save_file ]; then
+        # Remove all lines containing 'save_partitions'
+        sed '/save_partitions/d' $opt_save_file > $opt_save_file
+        # Save the progress
         echo "save_partitions=1" >> $opt_save_file
       fi
     fi
-    save_partitions=1
+    echo -e "${success}Disk successfully partitioned.${default}"
   ;;
   *)
     save-error "save_partitions"
@@ -240,6 +264,8 @@ if [[ -z "$save_created" ]]; then
 fi
 # For improving readability
 choose-directory() {
+  # To separate the question from mkfs.fat output
+  echo    ""
   echo    "Choose a directory to mount $parteddevice to."
   echo -e "${info}Note: if you pick a directory with contents,"
   read -p "'umount ${parteddevice}2' to access them after exiting the script! (/mnt by default):" savelocation
@@ -263,6 +289,8 @@ save-argument() {
         case $createpath in
           [Yy])
             mkdir -pv $savelocation
+            touch ${savelocation}/$savefilename
+            save_created=1
           ;;
           [Nn])
             exitorcontinue-func() {
@@ -285,7 +313,6 @@ save-argument() {
           ;;
           [Rr])
             choose-directory
-            directory-arg-invalid
           ;;
           *)
             save-argument-invalid
@@ -295,11 +322,11 @@ save-argument() {
     fi
     fullsavename=${savelocation}/${savefilename}.sh
     touch $fullsavename
-    echo "savedevice=$parteddevice\nsavelocation=$savelocation\nsave_partitions=1\nsave_created=1\n" > $fullsavename
-    awk -i inplace '!seen[$0]++' $fullsavename
-    sed -i /save_partitions=0/d  $fullsavename
-    sed -i /save_created=0/d     $fullsavename
-    save_created=1
+    sed '/save_partitions/d' $fullsavename > $fullsavename
+    sed '/save_created/d'    $fullsavename > $fullsavename
+    sed '/savedevice/d'      $fullsavename > $fullsavename
+    sed '/savelocation/d'    $fullsavename > $fullsavename
+    echo "savedevice=$parteddevice\nsavelocation=$savelocation\nsave_partitions=1\nsave_created=1\n" >> $fullsavename
   fi
 }
 save-argument
@@ -365,10 +392,11 @@ case $save_created in
       touch $fullsavename
     fi
     # Saving the progress in the save file
-    echo -e "savedevice=$parteddevice\nsavelocation=$savelocation\nsave_partitions=1\nsave_created=1\n" > $fullsavename # write certain variables to save file
-    awk  -i inplace '!seen[$0]++' $fullsavename # remove duplicates of lines
-    sed  -i /save_partitions=0/d  $fullsavename # remove "save_partitions=0" line if present
-    sed  -i /save_created=0/d     $fullsavename # remove "save_created=0" line if present
+    sed '/save_partitions/d' $fullsavename > $fullsavename
+    sed '/save_created/d'    $fullsavename > $fullsavename
+    sed '/savedevice/d'      $fullsavename > $fullsavename
+    sed '/savelocation/d'    $fullsavename > $fullsavename
+    echo -e "savedevice=$parteddevice\nsavelocation=$savelocation\nsave_partitions=1\nsave_created=1\n" >> $fullsavename # write certain variables to save file
     echo -e "${success}Save file successfully created.${default}"
   ;;
   *)
@@ -376,6 +404,9 @@ case $save_created in
 esac
 
 # Preparing the system stage
+if [[ -z "$save_build_preparation" ]]; then
+  save_build_preparation=0
+fi
 case $save_build_preparation in
   1)
   ;;
@@ -394,36 +425,40 @@ case $save_build_preparation in
     esac
     mkdir -pv ${savelocation}/tools
     
-    echo -e "save_build_preparation=1\n" > $fullsavename
-    awk  -i inplace '!seen[$0]++'          $fullsavename
-    sed  -i /save_build_preparation=0/d    $fullsavename
+    sed '/save_build_preparation/d' $fullsavename > $fullsavename
+    echo -e "save_build_preparation=1\n" >> $fullsavename
     echo -e "${success}System successfully prepared.${default}"
   ;;
   *)
     save-error "save_build_preparation"
 esac
 
-# Installing cross binutils stage
+# Cross GNU Binutils installation stage
+if [[ -z "$save_cross_binutils" ]]; then
+  save_cross_binutils=0
+fi
 case $save_cross_binutils in
   1)
   ;;
   0)
     binutils_dir=${savelocation}/sources/binutils
     mkdir -pv $binutils_dir
-    curl --verbose https://ftp.gnu.org/gnu/binutils/binutils-2.42.tar.xz --output ${binutils_dir}/binutils-2.42.tar.xz
-    checksum=`sha512sum binutils-2.42.tar.xz`
-    if [ $checksum -ne `echo /etc/lfs-install/binutils.sha512` ]; then
-      echo -e "${warning}Warning: the SHA-512 checksum of binutils-2.42.tar.xz does not match the trusted one."
-      echo    "This means that the package was updated recently, or the repository was attacked."
-      echo -e "The tarball 'binutils-2.42.tar.xz' might have malicious content inside.${default}"
+    binutils_repo='https://ftp.gnu.org/gnu/binutils/'
+    binutils_latest=$(curl -s "${binutils_repo}" | grep -Eo '(binutils-[0-9]+([.][0-9]*)*)+.tar.xz' | tail -1)
+    curl ${binutils_repo}/$binutils_latest --output ${binutils_dir}/$binutils_latest
+    checksum=`sha512sum ${binutils_dir}/$binutils_latest | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/binutils.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $binutils_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$binutils_latest' might have malicious content inside.${default}"
       binutils_invalid_func() {
         read -p "Proceed anyway? (y,N):" binutils_invalid
         if [[ -z "$binutils_invalid" ]]; then
-          $binutils_invalid=n
+          binutils_invalid=n
         fi
         case $binutils_invalid in
           [Yy])
-            echo -e "${warning}Building unsafe Binutils.${default}"
+            echo -e "${warning}Building unsafe (or unstable) Binutils.${default}"
           ;;
           [Nn])
             exit 1
@@ -434,18 +469,1679 @@ case $save_cross_binutils in
       }
       binutils_invalid_func
     fi
-    mkdir -pv ${binutils_dir}/binutils-2.42
-    tar -xvf binutils-2.42.tar.xz ${binutils_dir}/binutils-2.42
-    mkdir -pv ${binutils_dir}/build
-    ${binutils_dir}/binutils-2.42/configure --prefix=${savelocation}/tools     \
-                                            --with-sysroot=$savelocation       \
-                                            --target=$(uname -m)-lfs-linux-gnu \
-                                            --disable-nls                      \
-                                            --enable-gprofng=no                \
-                                            --disable-werror
-    make -C ${binutils_dir}/binutils-2.42/
-    make -C ${binutils_dir}/binutils-2.42/ install
+    binutils_pkg=$(basename "${binutils_dir}/$binutils_latest" .tar.xz)
+    mkdir -pv  ${binutils_dir}/$binutils_pkg
+    # How did they happen to not have a 'specify a file to write to' option?
+    cd $binutils_dir
+    echo -e "${info}Extracting $binutils_latest contents...${default}"
+    tar -xf ${binutils_dir}/$binutils_latest
+    cd $OLDPWD
+    ${binutils_dir}/${binutils_pkg}/configure --prefix=${savelocation}/tools     \
+                                              --with-sysroot=$savelocation       \
+                                              --target=$(uname -m)-lfs-linux-gnu \
+                                              --disable-nls                      \
+                                              --enable-gprofng=no                \
+                                              --disable-werror
+    case $opt_one_job in
+      1)
+        make -C ${binutils_dir}/${binutils_pkg}/
+        make -C ${binutils_dir}/${binutils_pkg}/ install
+      ;;
+      *)
+        make -C ${binutils_dir}/${binutils_pkg}/ -j$(nproc)
+        make -C ${binutils_dir}/${binutils_pkg}/ -j$(nproc) install
+    esac
+    sed '/save_cross_binutils/d' $fullsavename > $fullsavename
+    echo -e "save_cross_binutils=1\n" >> $fullsavename
+    echo -e "${success}Binutils successfully installed for cross-compilation to '${savelocation}/tools'.${default}"
   ;;
   *)
     save-error "save_cross_binutils"
+esac
+
+# Cross GNU Compiler Collection installation stage
+if [[ -z "$save_cross_gcc" ]]; then
+  save_cross_gcc=0
+fi
+case $save_cross_gcc in
+  1)
+  ;;
+  0)
+    # Obtain GCC source code
+    gcc_dir=${savelocation}/sources/gcc
+    mkdir -pv $gcc_dir
+    gcc_repo="https://ftp.gnu.org/gnu/gcc/"
+    gcc_latest=$(curl -s "${gcc_repo}" | grep -Eo '(gcc-[0-9]+([.][0-9]*)*)+' | tail -1)
+    curl ${gcc_repo}/$gcc_latest/${gcc_latest}.tar.xz --output ${gcc_dir}/${gcc_latest}.tar.xz
+    checksum=`sha512sum ${gcc_dir}/${gcc_latest}.tar.xz | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/gcc.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $gcc_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '${gcc_latest}.tar.xz' might have malicious content inside.${default}"
+      gcc_invalid_func() {
+        read -p "Proceed anyway? (y,N):" gcc_invalid
+        if [[ -z "$gcc_invalid" ]]; then
+          gcc_invalid=n
+        fi
+        case $gcc_invalid in
+          [Yy])
+            echo -e "${warning}Building unsafe (or unstable) GNU Compiler Collection.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            gcc_invalid_func
+        esac
+      }
+      gcc_invalid_func
+    fi
+    cd $gcc_dir
+    echo -e "${info}Extracting ${gcc_latest}.tar.xz contents...${default}"
+    tar -xf ${gcc_dir}/$gcc_latest
+    cd $OLDPWD
+    gcc_pkg=$(basename "${gcc_dir}/$gcc_latest" .tar.xz)
+    # Obtain GNU Multiple Precision Floating-Point Reliable library (MPFR) source code
+    mpfr_dir=${gcc_dir}/${gcc_pkg}
+    mpfr_repo="https://ftp.gnu.org/gnu/mpfr/"
+    mpfr_latest=$(curl -s "${mpfr_repo}" | grep -Eo '(mpfr-[0-9]+([.][0-9]*)*)+.tar.xz' | tail -1)
+    curl ${mpfr_repo}/$mpfr_latest --output ${mpfr_dir}/mpfr.tar.xz
+    checksum=`sha512sum ${mpfr_dir}/mpfr.tar.xz | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/mpfr.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $mpfr_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$mpfr_latest' might have malicious content inside.${default}"
+      mpfr_invalid_func() {
+        read -p "Proceed anyway? (y,N):" mpfr_invalid
+        if [[ -z "$mpfr_invalid" ]]; then
+          mpfr_invalid=n
+        fi
+        case $mpfr_invalid in
+          [Yy])
+            echo -e "${warning}Building GCC using unsafe (or unstable) GNU MPFR.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            mpfr_invalid_func
+        esac
+      }
+      mpfr_invalid_func
+    fi
+    cd $mpfr_dir
+    echo -e "${info}Extracting $mpfr_latest contents...${default}"
+    tar -xf ${mpfr_dir}/mpfr.tar.xz
+    cd $OLDPWD
+    mpfr_pkg=$(basename "${mpfr_dir}/$mpfr_latest" .tar.xz)
+    mv -v ${mpfr_dir}/$mpfr_pkg ${mpfr_dir}/mpfr
+    # Obtain GNU Multiple Precision arithmetic library (GMP) source code
+    gmp_dir=${gcc_dir}/${gcc_pkg}
+    gmp_repo="https://ftp.gnu.org/gnu/gmp/"
+    gmp_latest=$(curl -s "${gmp_repo}" | grep -Eo '(gmp-[0-9]+([.][0-9]*)*)+.tar.xz' | tail -1)
+    curl ${gmp_repo}/$gmp_latest --output ${gmp_dir}/gmp.tar.xz
+    checksum=`sha512sum ${gmp_dir}/gmp.tar.xz | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/gmp.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $gmp_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$gmp_latest' might have malicious content inside.${default}"
+      gmp_invalid_func() {
+        read -p "Proceed anyway? (y,N):" gmp_invalid
+        if [[ -z "$gmp_invalid" ]]; then
+          gmp_invalid=n
+        fi
+        case $gmp_invalid in
+          [Yy])
+            echo -e "${warning}Building GCC using unsafe (or unstable) GNU GMP.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            gmp_invalid_func
+        esac
+      }
+      gmp_invalid_func
+    fi
+    cd $gmp_dir
+    echo -e "${info}Extracting $gmp_latest contents...${default}"
+    tar -xf ${gmp_dir}/gmp.tar.xz
+    cd $OLDPWD
+    gmp_pkg=$(basename "${gmp_dir}/$gmp_latest" .tar.xz)
+    mv -v ${gmp_dir}/$gmp_pkg ${gmp_dir}/gmp
+    # Obtain GNU MPC source code
+    mpc_dir=${gcc_dir}/${gcc_pkg}
+    mpc_repo="https://ftp.gnu.org/gnu/mpc/"
+    mpc_latest=$(curl -s "${mpc_repo}" | grep -Eo '(mpc-[0-9]+([.][0-9]*)*)+.tar.gz' | tail -1)
+    curl ${mpc_repo}/$mpc_latest --output ${mpc_dir}/mpc.tar.gz
+    checksum=`sha512sum ${mpc_dir}/mpc.tar.gz | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/mpc.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $mpc_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$mpc_latest' might have malicious content inside.${default}"
+      mpc_invalid_func() {
+        read -p "Proceed anyway? (y,N):" mpc_invalid
+        if [[ -z "$mpc_invalid" ]]; then
+          mpc_invalid=n
+        fi
+        case $mpc_invalid in
+          [Yy])
+            echo -e "${warning}Building GCC using unsafe (or unstable) GNU MPC.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            mpc_invalid_func
+        esac
+      }
+      mpc_invalid_func
+    fi
+    cd $mpc_dir
+    echo -e "${info}Extracting $mpc_latest contents...${default}"
+    tar -xf ${mpc_dir}/mpc.tar.gz
+    cd $OLDPWD
+    mpc_pkg=$(basename "${mpc_dir}/$mpc_latest" .tar.gz)
+    mv -v ${mpc_dir}/$mpc_pkg ${mpc_dir}/mpc
+    # Chapter 5.3.1
+    case $(uname -m) in
+      x86_64)
+        sed -e '/m64=/s/lib64/lib/' -i.orig ${gcc_dir}/${gcc_pkg}/gcc/config/i386/t-linux64
+      ;;
+    esac
+    # Finally build GCC
+    ${gcc_dir}/${gcc_pkg}/configure --target=$(uname -m)-lfs-linux-gnu \
+                                    --prefix=${savelocation}/tools     \
+                                    --with-glibc-version=2.39          \
+                                    --with-sysroot=$savelocation       \
+                                    --with-newlib                      \
+                                    --without-headers                  \
+                                    --enable-default-pie               \
+                                    --enable-default-ssp               \
+                                    --disable-nls                      \
+                                    --disable-shared                   \
+                                    --disable-multilib                 \
+                                    --disable-threads                  \
+                                    --disable-libatomic                \
+                                    --disable-libgomp                  \
+                                    --disable-libquadmath              \
+                                    --disable-libssp                   \
+                                    --disable-libvtv                   \
+                                    --disable-libstdcxx                \
+                                    --enable-languages=c,c++
+    case $opt_one_job in
+      1)
+        make -C ${gcc_dir}/${gcc_pkg}
+        make -C ${gcc_dir}/${gcc_pkg} install
+      ;;
+      *)
+        make -C ${gcc_dir}/${gcc_pkg} -j$(nproc)
+        make -C ${gcc_dir}/${gcc_pkg} -j$(nproc) install
+    esac
+    cat ${gcc_dir}/${gcc_pkg}/gcc/limitx.h ${gcc_dir}/${gcc_pkg}/gcc/glimits.h ${gcc_dir}/${gcc_pkg}/gcc/limity.h > \
+      `dirname $(${gcc_dir}/${gcc_pkg}/$(uname -m)-lfs-linux-gnu-gcc -print-libgcc-file-name)`/include/limits.h
+    # Save progress
+    sed '/save_cross_gcc/d' $fullsavename > $fullsavename
+    echo -e "save_cross_gcc=1\n" >> $fullsavename
+    echo -e "${success}GCC successfully installed for cross-compilation to '${savelocation}/tools'.${default}"
+  ;;
+  *)
+    save-error "save_cross_gcc"
+esac
+
+# Linux API Headers
+if [[ -z "$save_linux_headers" ]]; then
+  save_linux_headers=0
+fi
+case $save_linux_headers in
+  1)
+  ;;
+  0)
+    # Obtain Linux source code
+    linux_dir=${savelocation}/sources/linux
+    mkdir -pv $linux_dir
+    linux_repo="https://mirrors.edge.kernel.org/pub/linux/kernel/v6.x/"
+    linux_latest=$(curl -s "${linux_repo}" | grep -Eo '(linux-[0-9]+([.][0-9]*)*)+.tar.xz' | tail -1)
+    curl ${linux_repo}/$linux_latest --output ${linux_dir}/${linux_latest}
+    checksum=`sha512sum ${linux_dir}/${linux_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/linux.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $linux_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$linux_latest' might have malicious content inside.${default}"
+      linux_invalid_func() {
+        read -p "Proceed anyway? (y,N):" linux_invalid
+        if [[ -z "$linux_invalid" ]]; then
+          linux_invalid=n
+        fi
+        case $linux_invalid in
+          [Yy])
+            echo -e "${warning}Building unstable (or unsafe) Linux API Headers.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            linux_invalid_func
+        esac
+      }
+      linux_invalid_func
+    fi
+    cd $linux_dir
+    echo -e "${info}Extracting $linux_latest contents...${default}"
+    tar -xf ${linux_dir}/${linux_latest}
+    cd $OLDPWD
+    linux_pkg=$(basename "${linux_dir}/$linux_latest" .tar.xz)
+    # Make & install the Headers
+    case $opt_one_job in
+      1)
+        make -C ${linux_dir}/${linux_pkg} mrproper
+        make -C ${linux_dir}/${linux_pkg} headers
+      ;;
+      *)
+        make -C ${linux_dir}/${linux_pkg} -j$(nproc) mrproper
+        make -C ${linux_dir}/${linux_pkg} -j$(nproc) headers
+    esac
+    # Chapter 5.4.1
+    find    ${linux_dir}/${linux_pkg} -type f ! -name '*.h' -delete
+    cp  -rv ${linux_dir}/${linux_pkg}/usr/include ${savelocation}/usr
+    # Save progress
+    sed '/save_linux_headers/d' $fullsavename > $fullsavename
+    echo -e "save_linux_headers=1\n" >> $fullsavename
+    echo -e "${success}Linux API Headers successfully installed.${default}"
+  ;;
+  *)
+    save-error "save_linux_headers"
+esac
+
+# Target Glibc installation stage
+if [[ -z "$save_target_glibc" ]]; then
+  save_target_glibc=0
+fi
+case $save_target_glibc in
+  1)
+  ;;
+  0)
+    glibc_dir=${savelocation}/sources/glibc
+    mkdir -pv $glibc_dir
+    glibc_repo="https://ftp.gnu.org/gnu/glibc/"
+    patch_repo="https://www.linuxfromscratch.org/patches/lfs/12.1/glibc-2.39-fhs-1.patch"
+    glibc_latest=$(curl -s "${glibc_repo}" | grep -Eo '(glibc-[0-9]+([.][0-9]*)*)+.tar.xz' | tail -1)
+    curl ${glibc_repo}/$glibc_latest --output ${glibc_dir}/${glibc_latest}
+    pkg_checksum=`sha512sum ${glibc_dir}/${glibc_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/glibc.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $glibc_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$glibc_latest' might have malicious content inside.${default}"
+      glibc_invalid_func() {
+        read -p "Proceed anyway? (y,N):" glibc_invalid
+        if [[ -z "$glibc_invalid" ]]; then
+          glibc_invalid=n
+        fi
+        case $glibc_invalid in
+          [Yy])
+            echo -e "${warning}Building unstable (or unsafe) Glibc for cross-compilation.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            glibc_invalid_func
+        esac
+      }
+      glibc_invalid_func
+    fi
+    cd $glibc_dir
+    echo -e "${info}Extracting $glibc_latest contents...${default}"
+    tar -xf ${glibc_dir}/${glibc_latest}
+    cd $OLDPWD
+    glibc_pkg=$(basename "${glibc_dir}/$glibc_latest" .tar.xz)
+    curl ${patch_repo} --output ${glibc_dir}/${glibc_pkg}/glibc-2.39-fhs-1.patch
+    patch_checksum=`sha512sum ${glibc_dir}/${glibc_pkg}/glibc-2.39-fhs-1.patch | awk '{print $1}'`
+    if [ "$patch_checksum" != "`cat /etc/lfs-install/glibc-patch.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of glibc-2.39-fhs-1.patch does not match the trusted one."
+      echo    "This means the patch was updated recently, or the repository was attacked."
+      echo -e "glibc-2.39-fhs-1.patch might have malicious content inside.${default}"
+      glibc_patch_invalid_func() {
+        read -p "Proceed anyway? (y,N):" glibc_patch_invalid
+        if [[ -z "$glibc_patch_invalid" ]]; then
+          glibc_patch_invalid=n
+        fi
+        case $glibc_patch_invalid in
+          [Yy])
+            echo -e "${warning}Building unstable (or unsafe) Glibc for cross-compilation.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            glibc_patch_invalid_func
+        esac
+      }
+      glibc_patch_invalid_func
+    fi
+    # Chapter 5.5.1
+    case $(uname -m) in
+      i?86)
+        ln -sfv ${glibc_dir}/${glibc_pkg}/ld-linux.so.2 ${savelocation}/lib/ld-lsb.so.3
+      ;;
+      x86_64)
+        ln -sfv ${savelocation}/lib/ld-linux-x86-64.so.2 ${savelocation}/lib64
+        ln -sfv ${savelocation}/lib/ld-linux-x86-64.so.2 ${savelocation}/lib64/ld-lsb-x86-64.so.3
+      ;;
+    esac
+    patch -Np1 -i ${glibc_dir}/${glibc_pkg}/glibc-2.39-fhs-1.patch
+    echo "rootsbindir=${savelocation}/usr/sbin" > ${glibc_dir}/${glibc_pkg}/configparms
+    # Build and install
+    ${glibc_dir}/${glibc_pkg}/configure --prefix=${savelocation}/usr                              \
+                                        --host=$(uname -m)-lfs-linux-gnu                          \
+                                        --build=$(${glibc_dir}/${glibc_pkg}/scripts/config.guess) \
+                                        --enable-kernel=4.19                                      \
+                                        --with-headers=${savelocation}/usr/include                \
+                                        --disable-nscd                                            \
+                                        libc_cv_slibdir=${savelocation}/usr/lib
+    case $opt_one_job in
+      1)
+        make -C ${glibc_dir}/${glibc_pkg}
+        make -C ${glibc_dir}/${glibc_pkg} DESTDIR=${savelocation} install
+      ;;
+      *)
+        make -C ${glibc_dir}/${glibc_pkg} -j$(nproc)
+        make -C ${glibc_dir}/${glibc_pkg} -j$(nproc) DESTDIR=${savelocation} install
+    esac
+    sed '/RTLDLIST=/s@/usr@@g' -i ${savelocation}/usr/bin/ldd
+    # Save progress
+    sed '/save_target_glibc/d' $fullsavename > $fullsavename
+    echo -e "save_target_glibc=1\n" >> $fullsavename
+    echo -e "${success}Glibc for cross-compilation successfully installed.${default}"
+  ;;
+  *)
+    save-error "save_target_glibc"
+esac
+
+# Target Libstdc++ installation
+if [[ -z "$save_target_libstdcpp" ]]; then
+  save_target_libstdcpp=0
+fi
+case $save_target_libstdcpp in
+  1)
+  ;;
+  0)
+    # Libstdc++ is already included in GCC source code,
+    # so we skip downloading and straight up proceed to build and install.
+    libstdcpp_dir=${gcc_dir}/${gcc_pkg}/libstdc++-v3/
+    ${libstdcpp_dir}/configure --host=$(uname -m)-lfs-linux-gnu              \
+                               --build=$(${gcc_dir}/${gcc_pkg}/config.guess) \
+                               --prefix=${savelocation}/usr                  \
+                               --disable-multilib                            \
+                               --disable-nls                                 \
+                               --disable-libstdcxx-pch                       \
+                               --with-gxx-include-dir=${savelocation}/tools/$(uname -m)-lfs-linux-gnu/include/c++/13.2.0
+    case $opt_one_job in
+      1)
+        make -C $libstdcpp_dir
+        make -C $libstdcpp_dir DESTDIR=$savelocation install
+      ;;
+      *)
+        make -C $libstdcpp_dir -j$(nproc)
+        make -C $libstdcpp_dir -j$(nproc) DESTDIR=$savelocation install
+    esac
+    # Chapter 5.6.1
+    rm -v ${savelocation}/usr/lib/lib{stdc++{,exp,fs},supc++}.la
+    # Save progress
+    sed '/save_target_libstdcpp/d' $fullsavename > $fullsavename
+    echo -e "save_target_libstdcpp=1\n" >> $fullsavename
+    echo -e "${success}Temporary Libstdc++ successfully installed.${default}"
+  ;;
+  *)
+    save-error "save_target_libstdcpp"
+esac
+
+# Temporary GNU M4 macroprocessor installation
+if [[ -z "$save_temporary_m4" ]]; then
+  save_temporary_m4=0
+fi
+case $save_temporary_m4 in
+  1)
+  ;;
+  0)
+    m4_dir=${savelocation}/sources/m4
+    mkdir -pv $m4_dir
+    m4_repo="https://ftp.gnu.org/gnu/m4/"
+    m4_latest=$(curl -s "${m4_repo}" | grep -Eo '(m4-[0-9]+([.][0-9]*)*)+.tar.xz' | tail -1)
+    curl ${m4_repo}/$m4_latest --output ${m4_dir}/${m4_latest}
+    checksum=`sha512sum ${m4_dir}/${m4_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/m4.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $m4_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$m4_latest' might have malicious content inside.${default}"
+      m4_invalid_func() {
+        read -p "Proceed anyway? (y,N):" m4_invalid
+        if [[ -z "$m4_invalid" ]]; then
+          m4_invalid=n
+        fi
+        case $m4_invalid in
+          [Yy])
+            echo -e "${warning}Building unstable (or unsafe) temporary GNU M4 macroprocessor.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            m4_invalid_func
+        esac
+      }
+      m4_invalid_func
+    fi
+    cd $m4_dir
+    echo -e "${info}Extracting $m4_latest contents...${default}"
+    tar -xf ${m4_dir}/${m4_latest}
+    cd $OLDPWD
+    m4_pkg=$(basename "${m4_dir}/$m4_latest" .tar.xz)
+    # Build & install
+    ${m4_dir}/${m4_pkg}/configure --prefix=${savelocation}/usr                             \
+                                     --host=$(uname -m)-lfs-linux-gnu                         \
+                                     --build=$(${m4_dir}/${m4_pkg}/build-aux/config.guess)
+    case $opt_one_job in
+      1)
+        make -C ${m4_dir}/${m4_pkg}
+        make -C ${m4_dir}/${m4_pkg} DESTDIR=${savelocation} install
+      ;;
+      *)
+        make -C ${m4_dir}/${m4_pkg} -j$(nproc)
+        make -C ${m4_dir}/${m4_pkg} -j$(nproc) DESTDIR=${savelocation} install
+    esac
+    # Save progress
+    sed '/save_temporary_m4/d' $fullsavename > $fullsavename
+    echo -e "save_temporary_m4=1\n" >> $fullsavename
+    echo -e "${success}Temporary GNU M4 macroprocessor successfully installed.${default}"
+  ;;
+  *)
+    save-error "save_temporary_m4"
+esac
+
+# Temporary Ncurses library installation
+if [[ -z "$save_temp_ncurses" ]]; then
+  save_temp_ncurses=0
+fi
+case $save_temp_ncurses in
+  1)
+  ;;
+  0)
+    # Chapter 6.3.1: it doesn't tell to apply any patch, so we just download the tarball
+    ncurses_dir=${savelocation}/sources/ncurses
+    mkdir -pv $ncurses_dir
+    ncurses_repo="https://invisible-mirror.net/archives/ncurses/"
+    ncurses_latest=$(curl -s "${ncurses_repo}" | grep -Eo '(ncurses-[0-9]+([.][0-9]*)*)+.tar.gz' | tail -1)
+    curl ${ncurses_repo}/$ncurses_latest --output ${ncurses_dir}/${ncurses_latest}
+    checksum=`sha512sum ${ncurses_dir}/${ncurses_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/ncurses.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $ncurses_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$ncurses_latest' might have malicious content inside.${default}"
+      ncurses_invalid_func() {
+        read -p "Proceed anyway? (y,N):" ncurses_invalid
+        if [[ -z "$ncurses_invalid" ]]; then
+          ncurses_invalid=n
+        fi
+        case $ncurses_invalid in
+          [Yy])
+            echo -e "${warning}Building unstable (or unsafe) temporary Ncurses library.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            ncurses_invalid_func
+        esac
+      }
+      ncurses_invalid_func
+    fi
+    cd $ncurses_dir
+    echo -e "${info}Extracting $ncurses_latest contents...${default}"
+    tar -xf ${ncurses_dir}/${ncurses_latest}
+    cd $OLDPWD
+    ncurses_pkg=$(basename "${ncurses_dir}/$ncurses_latest" .tar.xz)
+    # Build & install
+    sed -i s/mawk// ${ncurses_dir}/${ncurses_pkg}/configure
+    mkdir -v ${ncurses_dir}/${ncurses_pkg}/tic
+    ${ncurses_dir}/${ncurses_pkg}/configure
+    case $opt_one_job in
+      1)
+        make -C ${ncurses_dir}/${ncurses_pkg}/include
+        make -C ${ncurses_dir}/${ncurses_pkg}/progs \
+                ${ncurses_dir}/${ncurses_pkg}/tic
+      ;;
+      *)
+        make -j$(nproc) -C ${ncurses_dir}/${ncurses_pkg}/include
+        make -j$(nproc) -C ${ncurses_dir}/${ncurses_pkg}/progs \
+                           ${ncurses_dir}/${ncurses_pkg}/tic
+    esac
+    ${ncurses_dir}/${ncurses_pkg}/configure --prefix=${savelocation}/usr                          \
+                                            --host=$(uname -m)-lfs-linux-gnu                      \
+                                            --build=$(${ncurses_dir}/${ncurses_pkg}/config.guess) \
+                                            --mandir=${savelocation}/usr/share/man                \
+                                            --with-manpage-format=normal                          \
+                                            --with-shared                                         \
+                                            --without-normal                                      \
+                                            --with-cxx-shared                                     \
+                                            --without-debug                                       \
+                                            --without-ada                                         \
+                                            --disable-stripping                                   \
+                                            --enable-widec
+    case $opt_one_job in
+      1)
+        make -C ${ncurses_dir}/${ncurses_pkg}
+        make -C ${ncurses_dir}/${ncurses_pkg} \
+             DESTDIR=${savelocation}          \
+             TIC_PATH=${ncurses_dir}/${ncurses_pkg}/build/progs/tic install
+      ;;
+      *)
+        make -C ${ncurses_dir}/${ncurses_pkg} -j$(nproc)
+        make -C ${ncurses_dir}/${ncurses_pkg} -j$(nproc) \
+             DESTDIR=${savelocation}                     \
+             TIC_PATH=${ncurses_dir}/${ncurses_pkg}/build/progs/tic install
+    esac
+    ln -sv ${ncurses_dir}/${ncurses_pkg}/libncursesw.so \
+           ${savelocation}/usr/lib/libncurses.so
+    sed -e 's/^#if.*XOPEN.*$/#if 1/' \
+        -i ${savelocation}/usr/include/curses.h
+    # Save progress
+    sed '/save_temp_ncurses/d' $fullsavename > $fullsavename
+    echo -e "save_temp_ncurses=1\n" >> $fullsavename
+    echo -e "${success}Temporary Ncurses library successfully installed.${default}"
+  ;;
+  *)
+    save-error "save_temp_ncurses"
+esac
+
+# Temporary Bash shell installation
+if [[ -z "$save_temp_bash" ]]; then
+  save_temp_bash=0
+fi
+case $save_temp_bash in
+  1)
+  ;;
+  0)
+    bash_dir=${savelocation}/sources/bash
+    mkdir -pv $bash_dir
+    bash_repo="https://ftp.gnu.org/gnu/bash/"
+    bash_latest=$(curl -s "${bash_repo}" | grep -Eo '(bash-[0-9]+([.][0-9]*)*)+.tar.gz' | tail -1)
+    curl ${bash_repo}/$bash_latest --output ${bash_dir}/${bash_latest}
+    checksum=`sha512sum ${bash_dir}/${bash_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/bash.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $bash_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$bash_latest' might have malicious content inside.${default}"
+      bash_invalid_func() {
+        read -p "Proceed anyway? (y,N):" bash_invalid
+        if [[ -z "$bash_invalid" ]]; then
+          bash_invalid=n
+        fi
+        case $bash_invalid in
+          [Yy])
+            echo -e "${warning}Building unstable (or unsafe) temporary Bash shell.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            bash_invalid_func
+        esac
+      }
+      bash_invalid_func
+    fi
+    cd $bash_dir
+    echo -e "${info}Extracting $bash_latest contents...${default}"
+    tar -xf ${bash_dir}/${bash_latest}
+    cd $OLDPWD
+    bash_pkg=$(basename "${bash_dir}/$bash_latest" .tar.gz)
+    # Build & install
+    ${bash_dir}/${bash_pkg}/configure --prefix=${savelocation}/usr                            \
+                                      --build=$(${bash_dir}/${bash_pkg}/support/config.guess) \
+                                      --host=$(uname -m)-lfs-linux-gnu                        \
+                                      --without-bash-malloc
+    case $opt_one_job in
+      1)
+        make -C ${bash_dir}/${bash_pkg}
+        make -C ${bash_dir}/${bash_pkg} DESTDIR=${savelocation} install
+      ;;
+      *)
+        make -C ${bash_dir}/${bash_pkg} -j$(nproc)
+        make -C ${bash_dir}/${bash_pkg} -j$(nproc) DESTDIR=${savelocation} install
+    esac
+    # Chapter 6.4.1
+    ln -sv ${bash_dir}/${bash_pkg}/bash ${savelocation}/bin/sh
+    # Save progress
+    sed '/save_temp_bash/d' $fullsavename > $fullsavename
+    echo -e "save_temp_bash=1\n" >> $fullsavename
+    echo -e "${success}Temporary Bash shell successfully installed.${default}"
+  ;;
+  *)
+    save-error "save_temp_bash"
+esac
+
+# Temporary Coreutils installation
+if [[ -z "$save_temp_coreutils" ]]; then
+  save_temp_coreutils=0
+fi
+case $save_temp_coreutils in
+  1)
+  ;;
+  0)
+    coreutils_dir=${savelocation}/sources/coreutils
+    mkdir -pv $coreutils_dir
+    coreutils_repo="https://ftp.gnu.org/gnu/coreutils/"
+    coreutils_latest=$(curl -s "${coreutils_repo}" | grep -Eo '(coreutils-[0-9]+([.][0-9]*)*)+.tar.xz' | tail -1)
+    curl ${coreutils_repo}/$coreutils_latest --output ${coreutils_dir}/${coreutils_latest}
+    checksum=`sha512sum ${coreutils_dir}/${coreutils_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/coreutils.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $coreutils_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$coreutils_latest' might have malicious content inside.${default}"
+      coreutils_invalid_func() {
+        read -p "Proceed anyway? (y,N):" coreutils_invalid
+        if [[ -z "$coreutils_invalid" ]]; then
+          coreutils_invalid=n
+        fi
+        case $coreutils_invalid in
+          [Yy])
+            echo -e "${warning}Building unstable (or unsafe) temporary GNU Coreutils.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            coreutils_invalid_func
+        esac
+      }
+      coreutils_invalid_func
+    fi
+    cd $coreutils_dir
+    echo -e "${info}Extracting $coreutils_latest contents...${default}"
+    tar -xf ${coreutils_dir}/${coreutils_latest}
+    cd $OLDPWD
+    coreutils_pkg=$(basename "${coreutils_dir}/$coreutils_latest" .tar.xz)
+    # Build & install
+    ${coreutils_dir}/${coreutils_pkg}/configure --prefix=${savelocation}/usr                                        \
+                                                --host=$(uname -m)-lfs-linux-gnu                                    \
+                                                --build=$(${coreutils_dir}/${coreutils_pkg}/build-aux/config.guess) \
+                                                --enable-install-program=hostname                                   \
+                                                --enable-no-install-program=kill,uptime
+    case $opt_one_job in
+      1)
+        make -C ${coreutils_dir}/${coreutils_pkg}
+        make -C ${coreutils_dir}/${coreutils_pkg} DESTDIR=${savelocation} install
+      ;;
+      *)
+        make -C ${coreutils_dir}/${coreutils_pkg} -j$(nproc)
+        make -C ${coreutils_dir}/${coreutils_pkg} -j$(nproc) DESTDIR=${savelocation} install
+    esac
+    mv    -v  ${savelocation}/usr/bin/chroot              ${savelocation}/usr/sbin
+    mkdir -pv ${savelocation}/usr/share/man/man8
+    mv    -v  ${savelocation}/usr/share/man/man1/chroot.1 ${savelocation}/usr/share/man/man8/chroot.8
+    sed   -i  's/"1"/"8"/'                                ${savelocation}/usr/share/man/man8/chroot.8
+    # Save progress
+    sed '/save_temp_coreutils/d' $fullsavename > $fullsavename
+    echo -e "save_temp_coreutils=1\n" >> $fullsavename
+    echo -e "${success}Temporary GNU Coreutils successfully installed.${default}"
+  ;;
+  *)
+    save-error "save_temp_coreutils"
+esac
+
+# Temporary Diffutils installation
+if [[ -z "$save_temp_diffutils" ]]; then
+  save_temp_diffutils=0
+fi
+case $save_temp_diffutils in
+  1)
+  ;;
+  0)
+    diffutils_dir=${savelocation}/sources/diffutils
+    mkdir -pv $diffutils_dir
+    diffutils_repo="https://ftp.gnu.org/gnu/diffutils/"
+    diffutils_latest=$(curl -s "${diffutils_repo}" | grep -Eo '(diffutils-[0-9]+([.][0-9]*)*)+.tar.xz' | tail -1)
+    curl ${diffutils_repo}/$diffutils_latest --output ${diffutils_dir}/${diffutils_latest}
+    checksum=`sha512sum ${diffutils_dir}/${diffutils_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/diffutils.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $diffutils_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$diffutils_latest' might have malicious content inside.${default}"
+      diffutils_invalid_func() {
+        read -p "Proceed anyway? (y,N):" diffutils_invalid
+        if [[ -z "$diffutils_invalid" ]]; then
+          diffutils_invalid=n
+        fi
+        case $diffutils_invalid in
+          [Yy])
+            echo -e "${warning}Building unstable (or unsafe) temporary GNU Diffutils.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            diffutils_invalid_func
+        esac
+      }
+      diffutils_invalid_func
+    fi
+    cd $diffutils_dir
+    echo -e "${info}Extracting $diffutils_latest contents...${default}"
+    tar -xf ${diffutils_dir}/${diffutils_latest}
+    cd $OLDPWD
+    diffutils_pkg=$(basename "${diffutils_dir}/$diffutils_latest" .tar.xz)
+    # Build & install
+    ${diffutils_dir}/${diffutils_pkg}/configure --prefix=${savelocation}/usr     \
+                                                --host=$(uname -m)-lfs-linux-gnu \
+                                                --build=$(${diffutils_dir}/${diffutils_pkg}/build-aux/config.guess)
+    case $opt_one_job in
+      1)
+        make -C ${diffutils_dir}/${diffutils_pkg}
+        make -C ${diffutils_dir}/${diffutils_pkg} DESTDIR=${savelocation} install
+      ;;
+      *)
+        make -C ${diffutils_dir}/${diffutils_pkg} -j$(nproc)
+        make -C ${diffutils_dir}/${diffutils_pkg} -j$(nproc) DESTDIR=${savelocation} install
+    esac
+    # Save progress
+    sed '/save_temp_diffutils/d' $fullsavename > $fullsavename
+    echo -e "save_temp_diffutils=1\n" >> $fullsavename
+    echo -e "${success}Temporary GNU Diffutils successfully installed.${default}"
+  ;;
+  *)
+    save-error "save_temp_diffutils"
+esac
+
+# Temporary Ian Darwin's Free File Command installation
+if [[ -z "$save_temp_file" ]]; then
+  save_temp_file=0
+fi
+case $save_temp_file in
+  1)
+  ;;
+  0)
+    file_dir=${savelocation}/sources/file
+    mkdir -pv $file_dir
+    file_repo="https://astron.com/pub/file/"
+    file_latest=$(curl -s "${file_repo}" | grep -Eo '(file-[0-9]+([.][0-9]*)*)+.tar.gz' | tail -1)
+    curl ${file_repo}/$file_latest --output ${file_dir}/${file_latest}
+    checksum=`sha512sum ${file_dir}/${file_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/file.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $file_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$file_latest' might have malicious content inside.${default}"
+      file_invalid_func() {
+        read -p "Proceed anyway? (y,N):" file_invalid
+        if [[ -z "$file_invalid" ]]; then
+          file_invalid=n
+        fi
+        case $file_invalid in
+          [Yy])
+            echo -e "${warning}Building unstable (or unsafe) temporary Ian Darwin's Free File Command.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            file_invalid_func
+        esac
+      }
+      file_invalid_func
+    fi
+    cd $file_dir
+    echo -e "${info}Extracting $file_latest contents...${default}"
+    tar -xf ${file_dir}/${file_latest}
+    cd $OLDPWD
+    file_pkg=$(basename "${file_dir}/$file_latest" .tar.xz)
+    # Build & install
+    mkdir -v ${file_dir}/${file_pkg}/temp_build
+    # Chapter 6.7.1. No idea why it says to go into the directory, but I'm not going to risk.
+    pushd ${file_dir}/${file_pkg}/temp_build
+      ../configure --disable-bzlib      \
+                   --disable-libseccomp \
+                   --disable-xzlib      \
+                   --disable-zlib
+      case $opt_one_job in
+        1)
+          make
+        ;;
+        *)
+          make -j$(nproc)
+      esac
+    popd
+    ${file_dir}/${file_pkg}/configure --prefix=${savelocation}/usr     \
+                                      --host=$(uname -m)-lfs-linux-gnu \
+                                      --build=$(${file_dir}/${file_pkg}/config.guess)
+    case $opt_one_job in
+      1)
+        make -C ${file_dir}/${file_pkg} \
+             FILE_COMPILE=${file_dir}/${file_pkg}/temp_build/src/file
+        make -C ${file_dir}/${file_pkg} \
+             DESTDIR=$savelocation install
+      ;;
+      *)
+        make -C ${file_dir}/${file_pkg} -j$(nproc) \
+             FILE_COMPILE=${file_dir}/${file_pkg}/temp_build/src/file
+        make -C ${file_dir}/${file_pkg} -j$(nproc) \
+             DESTDIR=$savelocation install
+    esac
+    rm -v ${savelocation}/usr/lib/libmagic.la
+    # Save progress
+    sed '/save_temp_file/d' $fullsavename > $fullsavename
+    echo -e "save_temp_file=1\n" >> $fullsavename
+    echo -e "${success}Temporary Ian Darwin's Free File Command successfully installed.${default}"
+  ;;
+  *)
+    save-error "save_temp_file"
+esac
+
+# Temporary GNU Findutils installation
+if [[ -z "$save_temp_findutils" ]]; then
+  save_temp_findutils=0
+fi
+case $save_temp_findutils in
+  1)
+  ;;
+  0)
+    findutils_dir=${savelocation}/sources/findutils
+    mkdir -pv $findutils_dir
+    findutils_repo="https://ftp.gnu.org/gnu/findutils/"
+    findutils_latest=$(curl -s "${findutils_repo}" | grep -Eo '(findutils-[0-9]+([.][0-9]*)*)+.tar.xz' | tail -1)
+    curl ${findutils_repo}/$findutils_latest --output ${findutils_dir}/${findutils_latest}
+    checksum=`sha512sum ${findutils_dir}/${findutils_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/findutils.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $findutils_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$findutils_latest' might have malicious content inside.${default}"
+      findutils_invalid_func() {
+        read -p "Proceed anyway? (y,N):" findutils_invalid
+        if [[ -z "$findutils_invalid" ]]; then
+          findutils_invalid=n
+        fi
+        case $findutils_invalid in
+          [Yy])
+            echo -e "${warning}Building unstable (or unsafe) temporary GNU Findutils.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            findutils_invalid_func
+        esac
+      }
+      findutils_invalid_func
+    fi
+    cd $findutils_dir
+    echo -e "${info}Extracting $findutils_latest contents...${default}"
+    tar -xf ${findutils_dir}/${findutils_latest}
+    cd $OLDPWD
+    findutils_pkg=$(basename "${findutils_dir}/$findutils_latest" .tar.xz)
+    # Build & install
+    ${findutils_dir}/${findutils_pkg}/configure --prefix=${savelocation}/usr                   \
+                                                --localstatedir=${savelocation}/var/lib/locate \
+                                                --host=$(uname -m)-lfs-linux-gnu               \
+                                                --build=$(${findutils_dir}/${findutils_pkg}/build-aux/config.guess)
+    case $opt_one_job in
+      1)
+        make -C ${findutils_dir}/${findutils_pkg}
+        make -C ${findutils_dir}/${findutils_pkg} DESTDIR=${savelocation} install
+      ;;
+      *)
+        make -C ${findutils_dir}/${findutils_pkg} -j$(nproc)
+        make -C ${findutils_dir}/${findutils_pkg} -j$(nproc) DESTDIR=${savelocation} install
+    esac
+    # Save progress
+    sed '/save_temp_findutils/d' $fullsavename > $fullsavename
+    echo -e "save_temp_findutils=1\n" >> $fullsavename
+    echo -e "${success}Temporary GNU Findutils successfully installed.${default}"
+  ;;
+  *)
+    save-error "save_temp_findutils"
+esac
+
+# Temporary GNU awk installation
+if [[ -z "$save_temp_gawk" ]]; then
+  save_temp_gawk=0
+fi
+case $save_temp_gawk in
+  1)
+  ;;
+  0)
+    gawk_dir=${savelocation}/sources/gawk
+    mkdir -pv $gawk_dir
+    gawk_repo="https://ftp.gnu.org/gnu/gawk/"
+    gawk_latest=$(curl -s "${gawk_repo}" | grep -Eo '(gawk-[0-9]+([.][0-9]*)*)+.tar.xz' | tail -1)
+    curl ${gawk_repo}/$gawk_latest --output ${gawk_dir}/${gawk_latest}
+    checksum=`sha512sum ${gawk_dir}/${gawk_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/gawk.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $gawk_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$gawk_latest' might have malicious content inside.${default}"
+      gawk_invalid_func() {
+        read -p "Proceed anyway? (y,N):" gawk_invalid
+        if [[ -z "$gawk_invalid" ]]; then
+          gawk_invalid=n
+        fi
+        case $gawk_invalid in
+          [Yy])
+            echo -e "${warning}Building unstable (or unsafe) temporary GNU awk.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            gawk_invalid_func
+        esac
+      }
+      gawk_invalid_func
+    fi
+    cd $gawk_dir
+    echo -e "${info}Extracting $gawk_latest contents...${default}"
+    tar -xf ${gawk_dir}/${gawk_latest}
+    cd $OLDPWD
+    gawk_pkg=$(basename "${gawk_dir}/$gawk_latest" .tar.xz)
+    # Chapter 6.9.1
+    sed -i 's/extras//' ${gawk_dir}/${gawk_pkg}/Makefile.in
+    # Build & install
+    ${gawk_dir}/${gawk_pkg}/configure --prefix=${savelocation}/usr     \
+                                      --host=$(uname -m)-lfs-linux-gnu \
+                                      --build=$(${gawk_dir}/${gawk_pkg}/build-aux/config.guess)
+    case $opt_one_job in
+      1)
+        make -C ${gawk_dir}/${gawk_pkg}
+        make -C ${gawk_dir}/${gawk_pkg} DESTDIR=${savelocation} install
+      ;;
+      *)
+        make -C ${gawk_dir}/${gawk_pkg} -j$(nproc)
+        make -C ${gawk_dir}/${gawk_pkg} -j$(nproc) DESTDIR=${savelocation} install
+    esac
+    # Save progress
+    sed '/save_temp_gawk/d' $fullsavename > $fullsavename
+    echo -e "save_temp_gawk=1\n" >> $fullsavename
+    echo -e "${success}Temporary GNU awk successfully installed.${default}"
+  ;;
+  *)
+    save-error "save_temp_gawk"
+esac
+
+# Temporary GNU Grep installation
+if [[ -z "$save_temp_grep" ]]; then
+  save_temp_grep=0
+fi
+case $save_temp_grep in
+  1)
+  ;;
+  0)
+    grep_dir=${savelocation}/sources/grep
+    mkdir -pv $grep_dir
+    grep_repo="https://ftp.gnu.org/gnu/grep/"
+    grep_latest=$(curl -s "${grep_repo}" | grep -Eo '(grep-[0-9]+([.][0-9]*)*)+.tar.xz' | tail -1)
+    curl ${grep_repo}/$grep_latest --output ${grep_dir}/${grep_latest}
+    checksum=`sha512sum ${grep_dir}/${grep_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/grep.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $grep_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$grep_latest' might have malicious content inside.${default}"
+      grep_invalid_func() {
+        read -p "Proceed anyway? (y,N):" grep_invalid
+        if [[ -z "$grep_invalid" ]]; then
+          grep_invalid=n
+        fi
+        case $grep_invalid in
+          [Yy])
+            echo -e "${warning}Building unstable (or unsafe) temporary GNU Grep.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            grep_invalid_func
+        esac
+      }
+      grep_invalid_func
+    fi
+    cd $grep_dir
+    echo -e "${info}Extracting $grep_latest contents...${default}"
+    tar -xf ${grep_dir}/${grep_latest}
+    cd $OLDPWD
+    grep_pkg=$(basename "${grep_dir}/$grep_latest" .tar.xz)
+    # Build & install
+    ${grep_dir}/${grep_pkg}/configure --prefix=${savelocation}/usr     \
+                                      --host=$(uname -m)-lfs-linux-gnu \
+                                      --build=$(${grep_dir}/${grep_pkg}/build-aux/config.guess)
+    case $opt_one_job in
+      1)
+        make -C ${grep_dir}/${grep_pkg}
+        make -C ${grep_dir}/${grep_pkg} DESTDIR=${savelocation} install
+      ;;
+      *)
+        make -C ${grep_dir}/${grep_pkg} -j$(nproc)
+        make -C ${grep_dir}/${grep_pkg} -j$(nproc) DESTDIR=${savelocation} install
+    esac
+    # Save progress
+    sed '/save_temp_grep/d' $fullsavename > $fullsavename
+    echo -e "save_temp_grep=1\n" >> $fullsavename
+    echo -e "${success}Temporary GNU Grep successfully installed.${default}"
+  ;;
+  *)
+    save-error "save_temp_grep"
+esac
+
+# Temporary GNU Gzip installation
+if [[ -z "$save_temp_gzip" ]]; then
+  save_temp_gzip=0
+fi
+case $save_temp_gzip in
+  1)
+  ;;
+  0)
+    gzip_dir=${savelocation}/sources/gzip
+    mkdir -pv $gzip_dir
+    gzip_repo="https://ftp.gnu.org/gnu/gzip/"
+    gzip_latest=$(curl -s "${gzip_repo}" | grep -Eo '(gzip-[0-9]+([.][0-9]*)*)+.tar.xz' | tail -1)
+    curl ${gzip_repo}/$gzip_latest --output ${gzip_dir}/${gzip_latest}
+    checksum=`sha512sum ${gzip_dir}/${gzip_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/gzip.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $gzip_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$gzip_latest' might have malicious content inside.${default}"
+      gzip_invalid_func() {
+        read -p "Proceed anyway? (y,N):" gzip_invalid
+        if [[ -z "$gzip_invalid" ]]; then
+          gzip_invalid=n
+        fi
+        case $gzip_invalid in
+          [Yy])
+            echo -e "${warning}Building unstable (or unsafe) temporary GNU Gzip.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            gzip_invalid_func
+        esac
+      }
+      gzip_invalid_func
+    fi
+    cd $gzip_dir
+    echo -e "${info}Extracting $gzip_latest contents...${default}"
+    tar -xf ${gzip_dir}/${gzip_latest}
+    cd $OLDPWD
+    gzip_pkg=$(basename "${gzip_dir}/$gzip_latest" .tar.xz)
+    # Build & install
+    ${gzip_dir}/${gzip_pkg}/configure --prefix=${savelocation}/usr \
+                                      --host=$(uname -m)-lfs-linux-gnu
+    case $opt_one_job in
+      1)
+        make -C ${gzip_dir}/${gzip_pkg}
+        make -C ${gzip_dir}/${gzip_pkg} DESTDIR=${savelocation} install
+      ;;
+      *)
+        make -C ${gzip_dir}/${gzip_pkg} -j$(nproc)
+        make -C ${gzip_dir}/${gzip_pkg} -j$(nproc) DESTDIR=${savelocation} install
+    esac
+    # Save progress
+    sed '/save_temp_gzip/d' $fullsavename > $fullsavename
+    echo -e "save_temp_gzip=1\n" >> $fullsavename
+    echo -e "${success}Temporary GNU Gzip successfully installed.${default}"
+  ;;
+  *)
+    save-error "save_temp_gzip"
+esac
+
+# Temporary GNU Make installation
+if [[ -z "$save_temp_make" ]]; then
+  save_temp_make=0
+fi
+case $save_temp_make in
+  1)
+  ;;
+  0)
+    make_dir=${savelocation}/sources/make
+    mkdir -pv $make_dir
+    make_repo="https://ftp.gnu.org/gnu/make/"
+    make_latest=$(curl -s "${make_repo}" | grep -Eo '(make-[0-9]+([.][0-9]*)*)+.tar.lz' | tail -1)
+    curl ${make_repo}/$make_latest --output ${make_dir}/${make_latest}
+    checksum=`sha512sum ${make_dir}/${make_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/make.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $make_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$make_latest' might have malicious content inside.${default}"
+      make_invalid_func() {
+        read -p "Proceed anyway? (y,N):" make_invalid
+        if [[ -z "$make_invalid" ]]; then
+          make_invalid=n
+        fi
+        case $make_invalid in
+          [Yy])
+            echo -e "${warning}Building unstable (or unsafe) temporary GNU Make.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            make_invalid_func
+        esac
+      }
+      make_invalid_func
+    fi
+    cd $make_dir
+    echo -e "${info}Extracting $make_latest contents...${default}"
+    tar -xf ${make_dir}/${make_latest}
+    cd $OLDPWD
+    make_pkg=$(basename "${make_dir}/$make_latest" .tar.lz)
+    # Build & install
+    ${make_dir}/${make_pkg}/configure --prefix=${savelocation}/usr     \
+                                      --without-guile                  \
+                                      --host=$(uname -m)-lfs-linux-gnu \
+                                      --build=$(${make_dir}/${make_pkg}/build-aux/config.guess)
+    case $opt_one_job in
+      1)
+        make -C ${make_dir}/${make_pkg}
+        make -C ${make_dir}/${make_pkg} DESTDIR=${savelocation} install
+      ;;
+      *)
+        make -C ${make_dir}/${make_pkg} -j$(nproc)
+        make -C ${make_dir}/${make_pkg} -j$(nproc) DESTDIR=${savelocation} install
+    esac
+    # Save progress
+    sed '/save_temp_make/d' $fullsavename > $fullsavename
+    echo -e "save_temp_make=1\n" >> $fullsavename
+    echo -e "${success}Temporary GNU Make successfully installed.${default}"
+  ;;
+  *)
+    save-error "save_temp_make"
+esac
+
+# Temporary GNU Patch installation
+if [[ -z "$save_temp_patch" ]]; then
+  save_temp_patch=0
+fi
+case $save_temp_patch in
+  1)
+  ;;
+  0)
+    patch_dir=${savelocation}/sources/patch
+    mkdir -pv $patch_dir
+    patch_repo="https://ftp.gnu.org/gnu/patch/"
+    patch_latest=$(curl -s "${patch_repo}" | grep -Eo '(patch-[0-9]+([.][0-9]*)*)+.tar.xz' | tail -1)
+    curl ${patch_repo}/$patch_latest --output ${patch_dir}/${patch_latest}
+    checksum=`sha512sum ${patch_dir}/${patch_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/patch.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $patch_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$patch_latest' might have malicious content inside.${default}"
+      patch_invalid_func() {
+        read -p "Proceed anyway? (y,N):" patch_invalid
+        if [[ -z "$patch_invalid" ]]; then
+          patch_invalid=n
+        fi
+        case $patch_invalid in
+          [Yy])
+            echo -e "${warning}Building unstable (or unsafe) temporary GNU Patch.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            patch_invalid_func
+        esac
+      }
+      patch_invalid_func
+    fi
+    cd $patch_dir
+    echo -e "${info}Extracting $patch_latest contents...${default}"
+    tar -xf ${patch_dir}/${patch_latest}
+    cd $OLDPWD
+    patch_pkg=$(basename "${patch_dir}/$patch_latest" .tar.xz)
+    # Build & install
+    ${patch_dir}/${patch_pkg}/configure --prefix=${savelocation}/usr     \
+                                        --host=$(uname -m)-lfs-linux-gnu \
+                                        --build=$(${patch-dir}/${patch_pkg}/build-aux/config.guess)
+    case $opt_one_job in
+      1)
+        make -C ${patch_dir}/${patch_pkg}
+        make -C ${patch_dir}/${patch_pkg} DESTDIR=${savelocation} install
+      ;;
+      *)
+        make -C ${patch_dir}/${patch_pkg} -j$(nproc)
+        make -C ${patch_dir}/${patch_pkg} -j$(nproc) DESTDIR=${savelocation} install
+    esac
+    # Save progress
+    sed '/save_temp_patch/d' $fullsavename > $fullsavename
+    echo -e "save_temp_patch=1\n" >> $fullsavename
+    echo -e "${success}Temporary GNU Patch successfully installed.${default}"
+  ;;
+  *)
+    save-error "save_temp_patch"
+esac
+
+# Temporary GNU Streamline Editor installation
+if [[ -z "$save_temp_sed" ]]; then
+  save_temp_sed=0
+fi
+case $save_temp_sed in
+  1)
+  ;;
+  0)
+    sed_dir=${savelocation}/sources/sed
+    mkdir -pv $sed_dir
+    sed_repo="https://ftp.gnu.org/gnu/sed/"
+    sed_latest=$(curl -s "${sed_repo}" | grep -Eo '(sed-[0-9]+([.][0-9]*)*)+.tar.xz' | tail -1)
+    curl ${sed_repo}/$sed_latest --output ${sed_dir}/${sed_latest}
+    checksum=`sha512sum ${sed_dir}/${sed_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/sed.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $sed_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$sed_latest' might have malicious content inside.${default}"
+      sed_invalid_func() {
+        read -p "Proceed anyway? (y,N):" sed_invalid
+        if [[ -z "$sed_invalid" ]]; then
+          sed_invalid=n
+        fi
+        case $sed_invalid in
+          [Yy])
+            echo -e "${warning}Building unstable (or unsafe) temporary GNU Streamline Editor.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            sed_invalid_func
+        esac
+      }
+      sed_invalid_func
+    fi
+    cd $sed_dir
+    echo -e "${info}Extracting $sed_latest contents...${default}"
+    tar -xf ${sed_dir}/${sed_latest}
+    cd $OLDPWD
+    sed_pkg=$(basename "${sed_dir}/$sed_latest" .tar.xz)
+    # Build & install
+    ${sed_dir}/${sed_pkg}/configure --prefix=${savelocation}/usr     \
+                                    --host=$(uname -m)-lfs-linux-gnu \
+                                    --build=$(${sed_dir}/${sed_pkg}/build-aux/config.guess)
+    case $opt_one_job in
+      1)
+        make -C ${sed_dir}/${sed_pkg}
+        make -C ${sed_dir}/${sed_pkg} DESTDIR=${savelocation} install
+      ;;
+      *)
+        make -C ${sed_dir}/${sed_pkg} -j$(nproc)
+        make -C ${sed_dir}/${sed_pkg} -j$(nproc) DESTDIR=${savelocation} install
+    esac
+    # Save progress
+    sed '/save_temp_sed/d' $fullsavename > $fullsavename
+    echo -e "save_temp_sed=1\n" >> $fullsavename
+    echo -e "${success}Temporary GNU Streamline Editor successfully installed.${default}"
+  ;;
+  *)
+    save-error "save_temp_sed"
+esac
+
+# Temporary GNU Tar installation
+if [[ -z "$save_temp_tar" ]]; then
+  save_temp_tar=0
+fi
+case $save_temp_tar in
+  1)
+  ;;
+  0)
+    tar_dir=${savelocation}/sources/tar
+    mkdir -pv $tar_dir
+    tar_repo="https://ftp.gnu.org/gnu/tar/"
+    tar_latest=$(curl -s "${tar_repo}" | grep -Eo '(tar-[0-9]+([.][0-9]*)*)+.tar.xz' | tail -1)
+    curl ${tar_repo}/$tar_latest --output ${tar_dir}/${tar_latest}
+    checksum=`sha512sum ${tar_dir}/${tar_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/tar.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $tar_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$tar_latest' might have malicious content inside.${default}"
+      tar_invalid_func() {
+        read -p "Proceed anyway? (y,N):" tar_invalid
+        if [[ -z "$tar_invalid" ]]; then
+          tar_invalid=n
+        fi
+        case $tar_invalid in
+          [Yy])
+            echo -e "${warning}Building unstable (or unsafe) temporary GNU Tar.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            tar_invalid_func
+        esac
+      }
+      tar_invalid_func
+    fi
+    cd $tar_dir
+    echo -e "${info}Extracting $tar_latest contents...${default}"
+    tar -xf ${tar_dir}/${tar_latest}
+    cd $OLDPWD
+    tar_pkg=$(basename "${tar_dir}/$tar_latest" .tar.xz)
+    # Build & install
+    ${tar_dir}/${tar_pkg}/configure --prefix=${savelocation}/usr     \
+                                    --host=$(uname -m)-lfs-linux-gnu \
+                                    --build=$(${tar_dir}/${tar_pkg}build-aux/config.guess)
+    case $opt_one_job in
+      1)
+        make -C ${tar_dir}/${tar_pkg}
+        make -C ${tar_dir}/${tar_pkg} DESTDIR=${savelocation} install
+      ;;
+      *)
+        make -C ${tar_dir}/${tar_pkg} -j$(nproc)
+        make -C ${tar_dir}/${tar_pkg} -j$(nproc) DESTDIR=${savelocation} install
+    esac
+    # Save progress
+    sed '/save_temp_tar/d' $fullsavename > $fullsavename
+    echo -e "save_temp_tar=1\n" >> $fullsavename
+    echo -e "${success}Temporary GNU Tar successfully installed.${default}"
+  ;;
+  *)
+    save-error "save_temp_tar"
+esac
+
+# Temporary Xz Utils installation
+if [[ -z "$save_temp_xz" ]]; then
+  save_temp_xz=0
+fi
+case $save_temp_xz in
+  1)
+  ;;
+  0)
+    xz_dir=${savelocation}/sources/xz
+    mkdir -pv $xz_dir
+    # Cannot currently retrieve available versions from GitHub,
+    # and Xz Utils seems to update too often for Linux From Scratch,
+    # so here's a fixed version that is included in the Book.
+    xz_repo="https://github.com/tukaani-project/xz/releases/download/v5.4.6/xz-5.4.6.tar.xz"
+    curl ${xz_repo} --output ${xz_dir}/xz-5.4.6.tar.xz
+    checksum=`sha512sum ${xz_dir}/xz-5.4.6.tar.xz | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/xz.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of xz-5.4.6.tar.xz does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball 'xz-5.4.6.tar.xz' might have malicious content inside.${default}"
+      xz_invalid_func() {
+        read -p "Proceed anyway? (y,N):" xz_invalid
+        if [[ -z "$xz_invalid" ]]; then
+          xz_invalid=n
+        fi
+        case $xz_invalid in
+          [Yy])
+            echo -e "${warning}Building unstable (or unsafe) temporary Xz Utils.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            xz_invalid_func
+        esac
+      }
+      xz_invalid_func
+    fi
+    cd $xz_dir
+    echo -e "${info}Extracting xz-5.4.6.tar.xz contents...${default}"
+    tar -xf ${xz_dir}/xz-5.4.6.tar.xz
+    cd $OLDPWD
+    xz_pkg=$(basename "${xz_dir}/xz-5.4.6.tar.xz" .tar.xz)
+    # Build & install
+    ${xz_dir}/xz-5.4.6/configure --prefix=${savelocation}/usr     \
+                                 --host=$(uname -m)-lfs-linux-gnu \
+                                 --build=$(${xz_dir}/${xz_pkg}/build-aux/config.guess)
+    case $opt_one_job in
+      1)
+        make -C ${xz_dir}/${xz_pkg}
+        make -C ${xz_dir}/${xz_pkg} DESTDIR=${savelocation} install
+      ;;
+      *)
+        make -C ${tar_dir}/${xz_pkg} -j$(nproc)
+        make -C ${tar_dir}/${xz_pkg} -j$(nproc) DESTDIR=${savelocation} install
+    esac
+    # Save progress
+    sed '/save_temp_xz/d' $fullsavename > $fullsavename
+    echo -e "save_temp_xz=1\n" >> $fullsavename
+    echo -e "${success}Temporary Xz Utils successfully installed.${default}"
+  ;;
+  *)
+    save-error "save_temp_xz"
+esac
+
+# Temporary GNU Binutils installation
+if [[ -z "$save_temp_binutils" ]]; then
+  save_temp_binutils=0
+fi
+case $save_temp_binutils in
+  1)
+  ;;
+  0)
+    # We already have the source, so let's go back to it
+    case $opt_one_job in
+      1)
+        make -C ${binutils_dir}/${binutils_pkg} distclean
+      ;;
+      *)
+        make -C ${binutils_dir}/${bintuils_pkg} -j$(nproc) distclean
+    esac
+    sed '6009s/$add_dir//' -i ${binutils_dir}/${binutils_pkg}/ltmain.sh
+    # Build & install
+    ${binutils_dir}/${binutils_pkg}/configure               \
+    --prefix=${savelocation}/usr                            \
+    --build=$(${binutils_dir}/${binutils_pkg}/config.guess) \
+    --host=$(uname -m)-lfs-linux-gnu                        \
+    --disable-nls                                           \
+    --enable-shared                                         \
+    --enable-gprofng=no                                     \
+    --disable-werror                                        \
+    --enable-64-bit-bfd                                     \
+    --enable-default-hash-style=gnu
+    case $opt_one_job in
+      1)
+        make -C ${binutils_dir}/${binutils_pkg}
+        make -C ${binutils_dir}/${binutils_pkg} DESTDIR=${savelocation} install
+      ;;
+      *)
+        make -C ${binutils_dir}/${binutils_pkg} -j$(nproc)
+        make -C ${binutils_dir}/${binutils_pkg} -j$(nproc) DESTDIR=${savelocation} install
+    esac
+    rm -v ${savelocation}/usr/lib/lib{bfd,ctf,ctf-nobfd,opcodes,sframe}.{a,la}
+    # Save progress
+    sed '/save_temp_binutils/d' $fullsavename > $fullsavename
+    echo -e "save_temp_binutils=1\n" >> $fullsavename
+    echo -e "${success}Temporary GNU Binutils successfully installed.${default}"
+  ;;
+  *)
+    save-error "save_temp_binutils"
+esac
+
+# Temporary GNU Compiler Collection installation
+if [[ -z "$save_temp_gcc" ]]; then
+  save_temp_gcc=0
+fi
+case $save_temp_gcc in
+  1)
+  ;;
+  0)
+    # Obtain GCC source code, again.
+    rm -rv ${gcc_dir}/${gcc_pkg}
+    gcc_dir=${savelocation}/sources/gcc
+    mkdir -pv $gcc_dir
+    gcc_repo="https://ftp.gnu.org/gnu/gcc/"
+    gcc_latest=$(curl -s "${gcc_repo}" | grep -Eo '(gcc-[0-9]+([.][0-9]*)*)+' | tail -1)
+    curl ${gcc_repo}/$gcc_latest/${gcc_latest}.tar.xz --output ${gcc_dir}/${gcc_latest}.tar.xz
+    checksum=`sha512sum ${gcc_dir}/${gcc_latest}.tar.xz | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/gcc.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $gcc_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '${gcc_latest}.tar.xz' might have malicious content inside.${default}"
+      gcc_invalid_func() {
+        read -p "Proceed anyway? (y,N):" gcc_invalid
+        if [[ -z "$gcc_invalid" ]]; then
+          gcc_invalid=n
+        fi
+        case $gcc_invalid in
+          [Yy])
+            echo -e "${warning}Building unsafe (or unstable) GNU Compiler Collection.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            gcc_invalid_func
+        esac
+      }
+      gcc_invalid_func
+    fi
+    cd $gcc_dir
+    echo -e "${info}Extracting ${gcc_latest}.tar.xz contents...${default}"
+    tar -xf ${gcc_dir}/$gcc_latest
+    cd $OLDPWD
+    gcc_pkg=$(basename "${gcc_dir}/$gcc_latest" .tar.xz)
+    # Obtain GNU Multiple Precision Floating-Point Reliable library (MPFR) source code
+    mpfr_dir=${gcc_dir}/${gcc_pkg}
+    mpfr_repo="https://ftp.gnu.org/gnu/mpfr/"
+    mpfr_latest=$(curl -s "${mpfr_repo}" | grep -Eo '(mpfr-[0-9]+([.][0-9]*)*)+.tar.xz' | tail -1)
+    curl ${mpfr_repo}/$mpfr_latest --output ${mpfr_dir}/mpfr.tar.xz
+    checksum=`sha512sum ${mpfr_dir}/mpfr.tar.xz | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/mpfr.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $mpfr_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$mpfr_latest' might have malicious content inside.${default}"
+      mpfr_invalid_func() {
+        read -p "Proceed anyway? (y,N):" mpfr_invalid
+        if [[ -z "$mpfr_invalid" ]]; then
+          mpfr_invalid=n
+        fi
+        case $mpfr_invalid in
+          [Yy])
+            echo -e "${warning}Building GCC using unsafe (or unstable) GNU MPFR.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            mpfr_invalid_func
+        esac
+      }
+      mpfr_invalid_func
+    fi
+    cd $mpfr_dir
+    echo -e "${info}Extracting $mpfr_latest contents...${default}"
+    tar -xf ${mpfr_dir}/mpfr.tar.xz
+    cd $OLDPWD
+    mpfr_pkg=$(basename "${mpfr_dir}/$mpfr_latest" .tar.xz)
+    mv -v ${mpfr_dir}/$mpfr_pkg ${mpfr_dir}/mpfr
+    # Obtain GNU Multiple Precision arithmetic library (GMP) source code
+    gmp_dir=${gcc_dir}/${gcc_pkg}
+    gmp_repo="https://ftp.gnu.org/gnu/gmp/"
+    gmp_latest=$(curl -s "${gmp_repo}" | grep -Eo '(gmp-[0-9]+([.][0-9]*)*)+.tar.xz' | tail -1)
+    curl ${gmp_repo}/$gmp_latest --output ${gmp_dir}/gmp.tar.xz
+    checksum=`sha512sum ${gmp_dir}/gmp.tar.xz | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/gmp.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $gmp_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$gmp_latest' might have malicious content inside.${default}"
+      gmp_invalid_func() {
+        read -p "Proceed anyway? (y,N):" gmp_invalid
+        if [[ -z "$gmp_invalid" ]]; then
+          gmp_invalid=n
+        fi
+        case $gmp_invalid in
+          [Yy])
+            echo -e "${warning}Building GCC using unsafe (or unstable) GNU GMP.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            gmp_invalid_func
+        esac
+      }
+      gmp_invalid_func
+    fi
+    cd $gmp_dir
+    echo -e "${info}Extracting $gmp_latest contents...${default}"
+    tar -xf ${gmp_dir}/gmp.tar.xz
+    cd $OLDPWD
+    gmp_pkg=$(basename "${gmp_dir}/$gmp_latest" .tar.xz)
+    mv -v ${gmp_dir}/$gmp_pkg ${gmp_dir}/gmp
+    # Obtain GNU MPC source code
+    mpc_dir=${gcc_dir}/${gcc_pkg}
+    mpc_repo="https://ftp.gnu.org/gnu/mpc/"
+    mpc_latest=$(curl -s "${mpc_repo}" | grep -Eo '(mpc-[0-9]+([.][0-9]*)*)+.tar.gz' | tail -1)
+    curl ${mpc_repo}/$mpc_latest --output ${mpc_dir}/mpc.tar.gz
+    checksum=`sha512sum ${mpc_dir}/mpc.tar.gz | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/mpc.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $mpc_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$mpc_latest' might have malicious content inside.${default}"
+      mpc_invalid_func() {
+        read -p "Proceed anyway? (y,N):" mpc_invalid
+        if [[ -z "$mpc_invalid" ]]; then
+          mpc_invalid=n
+        fi
+        case $mpc_invalid in
+          [Yy])
+            echo -e "${warning}Building GCC using unsafe (or unstable) GNU MPC.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            mpc_invalid_func
+        esac
+      }
+      mpc_invalid_func
+    fi
+    cd $mpc_dir
+    echo -e "${info}Extracting $mpc_latest contents...${default}"
+    tar -xf ${mpc_dir}/mpc.tar.gz
+    cd $OLDPWD
+    mpc_pkg=$(basename "${mpc_dir}/$mpc_latest" .tar.gz)
+    mv -v ${mpc_dir}/$mpc_pkg ${mpc_dir}/mpc
+    # Chapter 6.18.1
+    case $(uname -m) in
+      x86_64)
+        sed -e '/m64=/s/lib64/lib/' \
+          -i.orig ${gcc_dir}/${gcc_pkg}/gcc/config/i386/t-linux64
+      ;;
+    esac
+    sed '/thread_header =/s/@.*@/gthr-posix.h/' \
+      -i ${gcc_dir}/${gcc_pkg}/libgcc/Makefile.in ${gcc_dir}/${gcc_pkg}/libstdc++-v3/include/Makefile.in
+    # Build & install
+    ${gcc_dir}/${gcc_pkg}/configure                                             \
+    --build=$(${gcc_dir}/${gcc_pkg}/config.guess)                               \
+    --host=$(uname -m)-lfs-linux-gnu                                            \
+    --target=$(uname -m)-lfs-linux-gnu                                          \
+    LDFLAGS_FOR_TARGET=-L${gcc_dir}/${gcc_pkg}/$(uname -m)-lfs-linux-gnu/libgcc \
+    --prefix=${savelocation}/usr                                                \
+    --with-build-sysroot=${savelocation}                                        \
+    --enable-default-pie                                                        \
+    --enable-default-ssp                                                        \
+    --disable-nls                                                               \
+    --disable-multilib                                                          \
+    --disable-libatomic                                                         \
+    --disable-libgomp                                                           \
+    --disable-libquadmath                                                       \
+    --disable-libsanitizer                                                      \
+    --disable-libssp                                                            \
+    --disable-libvtv                                                            \
+    --enable-languages=c,c++
+    case $opt_one_job in
+      1)
+        make -C ${gcc_dir}/${gcc_pkg}
+        make -C ${gcc_dir}/${gcc_pkg} DESTDIR=${savelocation} install
+      ;;
+      *)
+        make -C ${gcc_dir}/${gcc_pkg} -j$(nproc)
+        make -C ${gcc_dir}/${gcc_pkg} -j$(nproc) DESTDIR=${savelocation} install
+    esac
+    ln -sv ${gcc_dir}/${gcc_pkg}/gcc ${savelocation}/usr/bin/cc
+    # Save progress
+    sed '/save_temp_gcc/d' $fullsavename > $fullsavename
+    echo -e "save_temp_gcc=1\n" >> $fullsavename
+    echo -e "${success}Temporary GNU Compiler Collection successfully installed.${default}"
+  ;;
+  *)
+    save-error "save_temp_gcc"
 esac
