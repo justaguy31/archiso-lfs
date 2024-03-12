@@ -10,3 +10,6 @@ systemctl start pacman-init.service
 # archiso-lfs won't be living long anyways
 # as I want it to be replaced with an actual installation image of future LinuxHome distribution.
 chmod a+rwx /usr/local/bin/lfs-install
+# The system being a weirdo
+echo "Updating CA certificates..."
+update-ca-certificates

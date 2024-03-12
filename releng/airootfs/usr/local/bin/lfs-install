@@ -22,7 +22,7 @@ info="\e[0;97m"    # High intensity white
 default="\e[0m"    # White unless you modify the default shell color
 
 # Read the arguments for lfs-install
-args=$(getopt -a --options d:fhks:l --long "debug:,full-save,help,keep-going,save-file:,license" -- "$@")
+args=$(getopt -a --options d:fhjks:l --long "debug:,full-save,help,one-job,keep-going,save-file:,license" -- "$@")
 if [ $? -ne 0 ]; then
   echo "Use '-h' or '--help' for usage."
   exit 1
@@ -131,9 +131,7 @@ if [[ -f $opt_save_file && ! -z "$opt_save_file" ]]; then
   mount ${savedevice}2 $savelocation        || true
   mount ${savedevice}3 ${savelocation}/boot || true
 else
-  if [[ ! -z $opt_save_file ]]; then
-    echo -e "${warning}Save file not found, storing the path to possibly create it later.${default}"
-  fi
+  echo -e "${warning}Save file not found, storing the path to possibly create it later.${default}"
 fi
 
 # Check whether the script is being run with sudo privileges
@@ -326,7 +324,7 @@ save-argument() {
     sed '/save_created/d'    $fullsavename > $fullsavename
     sed '/savedevice/d'      $fullsavename > $fullsavename
     sed '/savelocation/d'    $fullsavename > $fullsavename
-    echo "savedevice=$parteddevice\nsavelocation=$savelocation\nsave_partitions=1\nsave_created=1\n" >> $fullsavename
+    echo -e "savedevice=$parteddevice\nsavelocation=$savelocation\nsave_partitions=1\nsave_created=1\n" >> $fullsavename
   fi
 }
 save-argument
@@ -476,12 +474,15 @@ case $save_cross_binutils in
     echo -e "${info}Extracting $binutils_latest contents...${default}"
     tar -xf ${binutils_dir}/$binutils_latest
     cd $OLDPWD
-    ${binutils_dir}/${binutils_pkg}/configure --prefix=${savelocation}/tools     \
-                                              --with-sysroot=$savelocation       \
-                                              --target=$(uname -m)-lfs-linux-gnu \
-                                              --disable-nls                      \
-                                              --enable-gprofng=no                \
-                                              --disable-werror
+    # Build & install
+    pushd ${binutils_dir}/${binutils_pkg}
+      ./configure --prefix=${savelocation}/tools     \
+                  --with-sysroot=$savelocation       \
+                  --target=$(uname -m)-lfs-linux-gnu \
+                  --disable-nls                      \
+                  --enable-gprofng=no                \
+                  --disable-werror
+    popd
     case $opt_one_job in
       1)
         make -C ${binutils_dir}/${binutils_pkg}/
@@ -650,25 +651,27 @@ case $save_cross_gcc in
       ;;
     esac
     # Finally build GCC
-    ${gcc_dir}/${gcc_pkg}/configure --target=$(uname -m)-lfs-linux-gnu \
-                                    --prefix=${savelocation}/tools     \
-                                    --with-glibc-version=2.39          \
-                                    --with-sysroot=$savelocation       \
-                                    --with-newlib                      \
-                                    --without-headers                  \
-                                    --enable-default-pie               \
-                                    --enable-default-ssp               \
-                                    --disable-nls                      \
-                                    --disable-shared                   \
-                                    --disable-multilib                 \
-                                    --disable-threads                  \
-                                    --disable-libatomic                \
-                                    --disable-libgomp                  \
-                                    --disable-libquadmath              \
-                                    --disable-libssp                   \
-                                    --disable-libvtv                   \
-                                    --disable-libstdcxx                \
-                                    --enable-languages=c,c++
+    pushd ${gcc_dir}/${gcc_pkg}
+      ./configure --target=$(uname -m)-lfs-linux-gnu \
+                  --prefix=${savelocation}/tools     \
+                  --with-glibc-version=2.39          \
+                  --with-sysroot=$savelocation       \
+                  --with-newlib                      \
+                  --without-headers                  \
+                  --enable-default-pie               \
+                  --enable-default-ssp               \
+                  --disable-nls                      \
+                  --disable-shared                   \
+                  --disable-multilib                 \
+                  --disable-threads                  \
+                  --disable-libatomic                \
+                  --disable-libgomp                  \
+                  --disable-libquadmath              \
+                  --disable-libssp                   \
+                  --disable-libvtv                   \
+                  --disable-libstdcxx                \
+                  --enable-languages=c,c++
+    popd
     case $opt_one_job in
       1)
         make -C ${gcc_dir}/${gcc_pkg}
@@ -832,13 +835,15 @@ case $save_target_glibc in
     patch -Np1 -i ${glibc_dir}/${glibc_pkg}/glibc-2.39-fhs-1.patch
     echo "rootsbindir=${savelocation}/usr/sbin" > ${glibc_dir}/${glibc_pkg}/configparms
     # Build and install
-    ${glibc_dir}/${glibc_pkg}/configure --prefix=${savelocation}/usr                              \
-                                        --host=$(uname -m)-lfs-linux-gnu                          \
-                                        --build=$(${glibc_dir}/${glibc_pkg}/scripts/config.guess) \
-                                        --enable-kernel=4.19                                      \
-                                        --with-headers=${savelocation}/usr/include                \
-                                        --disable-nscd                                            \
-                                        libc_cv_slibdir=${savelocation}/usr/lib
+    pushd ${glibc_dir}/${glibc_pkg}
+      ./configure --prefix=${savelocation}/usr                              \
+                  --host=$(uname -m)-lfs-linux-gnu                          \
+                  --build=$(${glibc_dir}/${glibc_pkg}/scripts/config.guess) \
+                  --enable-kernel=4.19                                      \
+                  --with-headers=${savelocation}/usr/include                \
+                  --disable-nscd                                            \
+                  libc_cv_slibdir=${savelocation}/usr/lib
+    popd
     case $opt_one_job in
       1)
         make -C ${glibc_dir}/${glibc_pkg}
@@ -869,13 +874,15 @@ case $save_target_libstdcpp in
     # Libstdc++ is already included in GCC source code,
     # so we skip downloading and straight up proceed to build and install.
     libstdcpp_dir=${gcc_dir}/${gcc_pkg}/libstdc++-v3/
-    ${libstdcpp_dir}/configure --host=$(uname -m)-lfs-linux-gnu              \
-                               --build=$(${gcc_dir}/${gcc_pkg}/config.guess) \
-                               --prefix=${savelocation}/usr                  \
-                               --disable-multilib                            \
-                               --disable-nls                                 \
-                               --disable-libstdcxx-pch                       \
-                               --with-gxx-include-dir=${savelocation}/tools/$(uname -m)-lfs-linux-gnu/include/c++/13.2.0
+    pushd $libstdcpp_dir
+      ./configure --host=$(uname -m)-lfs-linux-gnu              \
+                  --build=$(${gcc_dir}/${gcc_pkg}/config.guess) \
+                  --prefix=${savelocation}/usr                  \
+                  --disable-multilib                            \
+                  --disable-nls                                 \
+                  --disable-libstdcxx-pch                       \
+                  --with-gxx-include-dir=${savelocation}/tools/$(uname -m)-lfs-linux-gnu/include/c++/13.2.0
+    popd
     case $opt_one_job in
       1)
         make -C $libstdcpp_dir
@@ -938,9 +945,11 @@ case $save_temporary_m4 in
     cd $OLDPWD
     m4_pkg=$(basename "${m4_dir}/$m4_latest" .tar.xz)
     # Build & install
-    ${m4_dir}/${m4_pkg}/configure --prefix=${savelocation}/usr                             \
-                                     --host=$(uname -m)-lfs-linux-gnu                         \
-                                     --build=$(${m4_dir}/${m4_pkg}/build-aux/config.guess)
+    pushd ${m4_dir}/${m4_pkg}
+      ./configure --prefix=${savelocation}/usr                             \
+                  --host=$(uname -m)-lfs-linux-gnu                         \
+                  --build=$(${m4_dir}/${m4_pkg}/build-aux/config.guess)
+    popd
     case $opt_one_job in
       1)
         make -C ${m4_dir}/${m4_pkg}
@@ -1016,18 +1025,20 @@ case $save_temp_ncurses in
         make -j$(nproc) -C ${ncurses_dir}/${ncurses_pkg}/progs \
                            ${ncurses_dir}/${ncurses_pkg}/tic
     esac
-    ${ncurses_dir}/${ncurses_pkg}/configure --prefix=${savelocation}/usr                          \
-                                            --host=$(uname -m)-lfs-linux-gnu                      \
-                                            --build=$(${ncurses_dir}/${ncurses_pkg}/config.guess) \
-                                            --mandir=${savelocation}/usr/share/man                \
-                                            --with-manpage-format=normal                          \
-                                            --with-shared                                         \
-                                            --without-normal                                      \
-                                            --with-cxx-shared                                     \
-                                            --without-debug                                       \
-                                            --without-ada                                         \
-                                            --disable-stripping                                   \
-                                            --enable-widec
+    pushd ${ncurses_dir}/${ncurses_pkg}
+      ./configure --prefix=${savelocation}/usr                          \
+                  --host=$(uname -m)-lfs-linux-gnu                      \
+                  --build=$(${ncurses_dir}/${ncurses_pkg}/config.guess) \
+                  --mandir=${savelocation}/usr/share/man                \
+                  --with-manpage-format=normal                          \
+                  --with-shared                                         \
+                  --without-normal                                      \
+                  --with-cxx-shared                                     \
+                  --without-debug                                       \
+                  --without-ada                                         \
+                  --disable-stripping                                   \
+                  --enable-widec
+    popd
     case $opt_one_job in
       1)
         make -C ${ncurses_dir}/${ncurses_pkg}
@@ -1096,10 +1107,12 @@ case $save_temp_bash in
     cd $OLDPWD
     bash_pkg=$(basename "${bash_dir}/$bash_latest" .tar.gz)
     # Build & install
-    ${bash_dir}/${bash_pkg}/configure --prefix=${savelocation}/usr                            \
-                                      --build=$(${bash_dir}/${bash_pkg}/support/config.guess) \
-                                      --host=$(uname -m)-lfs-linux-gnu                        \
-                                      --without-bash-malloc
+    pushd ${bash_dir}/${bash_pkg}
+      ./configure --prefix=${savelocation}/usr                            \
+                  --build=$(${bash_dir}/${bash_pkg}/support/config.guess) \
+                  --host=$(uname -m)-lfs-linux-gnu                        \
+                  --without-bash-malloc
+    popd
     case $opt_one_job in
       1)
         make -C ${bash_dir}/${bash_pkg}
@@ -1162,11 +1175,13 @@ case $save_temp_coreutils in
     cd $OLDPWD
     coreutils_pkg=$(basename "${coreutils_dir}/$coreutils_latest" .tar.xz)
     # Build & install
-    ${coreutils_dir}/${coreutils_pkg}/configure --prefix=${savelocation}/usr                                        \
-                                                --host=$(uname -m)-lfs-linux-gnu                                    \
-                                                --build=$(${coreutils_dir}/${coreutils_pkg}/build-aux/config.guess) \
-                                                --enable-install-program=hostname                                   \
-                                                --enable-no-install-program=kill,uptime
+    pushd ${coreutils_dir}/${coreutils_pkg}
+      ./configure --prefix=${savelocation}/usr                                        \
+                  --host=$(uname -m)-lfs-linux-gnu                                    \
+                  --build=$(${coreutils_dir}/${coreutils_pkg}/build-aux/config.guess) \
+                  --enable-install-program=hostname                                   \
+                  --enable-no-install-program=kill,uptime
+    popd
     case $opt_one_job in
       1)
         make -C ${coreutils_dir}/${coreutils_pkg}
@@ -1231,9 +1246,11 @@ case $save_temp_diffutils in
     cd $OLDPWD
     diffutils_pkg=$(basename "${diffutils_dir}/$diffutils_latest" .tar.xz)
     # Build & install
-    ${diffutils_dir}/${diffutils_pkg}/configure --prefix=${savelocation}/usr     \
-                                                --host=$(uname -m)-lfs-linux-gnu \
-                                                --build=$(${diffutils_dir}/${diffutils_pkg}/build-aux/config.guess)
+    pushd ${diffutils_dir}/${diffutils_pkg}
+      ./configure --prefix=${savelocation}/usr     \
+                  --host=$(uname -m)-lfs-linux-gnu \
+                  --build=$(${diffutils_dir}/${diffutils_pkg}/build-aux/config.guess)
+    popd
     case $opt_one_job in
       1)
         make -C ${diffutils_dir}/${diffutils_pkg}
@@ -1295,7 +1312,7 @@ case $save_temp_file in
     file_pkg=$(basename "${file_dir}/$file_latest" .tar.xz)
     # Build & install
     mkdir -v ${file_dir}/${file_pkg}/temp_build
-    # Chapter 6.7.1. No idea why it says to go into the directory, but I'm not going to risk.
+    # Chapter 6.7.1
     pushd ${file_dir}/${file_pkg}/temp_build
       ../configure --disable-bzlib      \
                    --disable-libseccomp \
@@ -1309,9 +1326,11 @@ case $save_temp_file in
           make -j$(nproc)
       esac
     popd
-    ${file_dir}/${file_pkg}/configure --prefix=${savelocation}/usr     \
-                                      --host=$(uname -m)-lfs-linux-gnu \
-                                      --build=$(${file_dir}/${file_pkg}/config.guess)
+    pushd ${file_dir}/${file_pkg}
+      ./configure --prefix=${savelocation}/usr     \
+                  --host=$(uname -m)-lfs-linux-gnu \
+                  --build=$(${file_dir}/${file_pkg}/config.guess)
+    popd
     case $opt_one_job in
       1)
         make -C ${file_dir}/${file_pkg} \
@@ -1377,10 +1396,12 @@ case $save_temp_findutils in
     cd $OLDPWD
     findutils_pkg=$(basename "${findutils_dir}/$findutils_latest" .tar.xz)
     # Build & install
-    ${findutils_dir}/${findutils_pkg}/configure --prefix=${savelocation}/usr                   \
-                                                --localstatedir=${savelocation}/var/lib/locate \
-                                                --host=$(uname -m)-lfs-linux-gnu               \
-                                                --build=$(${findutils_dir}/${findutils_pkg}/build-aux/config.guess)
+    pushd ${findutils_dir}/${findutils_pkg}
+      ./configure --prefix=${savelocation}/usr                   \
+                  --localstatedir=${savelocation}/var/lib/locate \
+                  --host=$(uname -m)-lfs-linux-gnu               \
+                  --build=$(${findutils_dir}/${findutils_pkg}/build-aux/config.guess)
+    popd
     case $opt_one_job in
       1)
         make -C ${findutils_dir}/${findutils_pkg}
@@ -1443,9 +1464,11 @@ case $save_temp_gawk in
     # Chapter 6.9.1
     sed -i 's/extras//' ${gawk_dir}/${gawk_pkg}/Makefile.in
     # Build & install
-    ${gawk_dir}/${gawk_pkg}/configure --prefix=${savelocation}/usr     \
-                                      --host=$(uname -m)-lfs-linux-gnu \
-                                      --build=$(${gawk_dir}/${gawk_pkg}/build-aux/config.guess)
+    pushd ${gawk_dir}/${gawk_pkg}
+      ./configure --prefix=${savelocation}/usr     \
+                  --host=$(uname -m)-lfs-linux-gnu \
+                  --build=$(${gawk_dir}/${gawk_pkg}/build-aux/config.guess)
+    popd
     case $opt_one_job in
       1)
         make -C ${gawk_dir}/${gawk_pkg}
@@ -1506,9 +1529,11 @@ case $save_temp_grep in
     cd $OLDPWD
     grep_pkg=$(basename "${grep_dir}/$grep_latest" .tar.xz)
     # Build & install
-    ${grep_dir}/${grep_pkg}/configure --prefix=${savelocation}/usr     \
-                                      --host=$(uname -m)-lfs-linux-gnu \
-                                      --build=$(${grep_dir}/${grep_pkg}/build-aux/config.guess)
+    pushd ${grep_dir}/${grep_pkg}
+      ./configure --prefix=${savelocation}/usr     \
+                  --host=$(uname -m)-lfs-linux-gnu \
+                  --build=$(${grep_dir}/${grep_pkg}/build-aux/config.guess)
+    popd
     case $opt_one_job in
       1)
         make -C ${grep_dir}/${grep_pkg}
@@ -1569,8 +1594,10 @@ case $save_temp_gzip in
     cd $OLDPWD
     gzip_pkg=$(basename "${gzip_dir}/$gzip_latest" .tar.xz)
     # Build & install
-    ${gzip_dir}/${gzip_pkg}/configure --prefix=${savelocation}/usr \
-                                      --host=$(uname -m)-lfs-linux-gnu
+    pushd ${gzip_dir}/${gzip_pkg}
+      ./configure --prefix=${savelocation}/usr \
+                  --host=$(uname -m)-lfs-linux-gnu
+    popd
     case $opt_one_job in
       1)
         make -C ${gzip_dir}/${gzip_pkg}
@@ -1631,10 +1658,12 @@ case $save_temp_make in
     cd $OLDPWD
     make_pkg=$(basename "${make_dir}/$make_latest" .tar.lz)
     # Build & install
-    ${make_dir}/${make_pkg}/configure --prefix=${savelocation}/usr     \
-                                      --without-guile                  \
-                                      --host=$(uname -m)-lfs-linux-gnu \
-                                      --build=$(${make_dir}/${make_pkg}/build-aux/config.guess)
+    pushd ${make_dir}/${make_pkg}
+      ./configure --prefix=${savelocation}/usr     \
+                  --without-guile                  \
+                  --host=$(uname -m)-lfs-linux-gnu \
+                  --build=$(${make_dir}/${make_pkg}/build-aux/config.guess)
+    popd
     case $opt_one_job in
       1)
         make -C ${make_dir}/${make_pkg}
@@ -1695,9 +1724,11 @@ case $save_temp_patch in
     cd $OLDPWD
     patch_pkg=$(basename "${patch_dir}/$patch_latest" .tar.xz)
     # Build & install
-    ${patch_dir}/${patch_pkg}/configure --prefix=${savelocation}/usr     \
-                                        --host=$(uname -m)-lfs-linux-gnu \
-                                        --build=$(${patch-dir}/${patch_pkg}/build-aux/config.guess)
+    pushd ${patch_dir}/${patch_pkg}
+      ./configure --prefix=${savelocation}/usr     \
+                  --host=$(uname -m)-lfs-linux-gnu \
+                  --build=$(${patch-dir}/${patch_pkg}/build-aux/config.guess)
+    popd
     case $opt_one_job in
       1)
         make -C ${patch_dir}/${patch_pkg}
@@ -1758,9 +1789,11 @@ case $save_temp_sed in
     cd $OLDPWD
     sed_pkg=$(basename "${sed_dir}/$sed_latest" .tar.xz)
     # Build & install
-    ${sed_dir}/${sed_pkg}/configure --prefix=${savelocation}/usr     \
-                                    --host=$(uname -m)-lfs-linux-gnu \
-                                    --build=$(${sed_dir}/${sed_pkg}/build-aux/config.guess)
+    pushd ${sed_dir}/${sed_pkg}
+      ./configure --prefix=${savelocation}/usr     \
+                  --host=$(uname -m)-lfs-linux-gnu \
+                  --build=$(${sed_dir}/${sed_pkg}/build-aux/config.guess)
+    popd
     case $opt_one_job in
       1)
         make -C ${sed_dir}/${sed_pkg}
@@ -1821,9 +1854,11 @@ case $save_temp_tar in
     cd $OLDPWD
     tar_pkg=$(basename "${tar_dir}/$tar_latest" .tar.xz)
     # Build & install
-    ${tar_dir}/${tar_pkg}/configure --prefix=${savelocation}/usr     \
-                                    --host=$(uname -m)-lfs-linux-gnu \
-                                    --build=$(${tar_dir}/${tar_pkg}build-aux/config.guess)
+    pushd ${tar_dir}/${tar_pkg}
+      ./configure --prefix=${savelocation}/usr     \
+                  --host=$(uname -m)-lfs-linux-gnu \
+                  --build=$(${tar_dir}/${tar_pkg}build-aux/config.guess)
+    popd
     case $opt_one_job in
       1)
         make -C ${tar_dir}/${tar_pkg}
@@ -1886,9 +1921,11 @@ case $save_temp_xz in
     cd $OLDPWD
     xz_pkg=$(basename "${xz_dir}/xz-5.4.6.tar.xz" .tar.xz)
     # Build & install
-    ${xz_dir}/xz-5.4.6/configure --prefix=${savelocation}/usr     \
-                                 --host=$(uname -m)-lfs-linux-gnu \
-                                 --build=$(${xz_dir}/${xz_pkg}/build-aux/config.guess)
+    pushd ${xz_dir}/${xz_pkg}
+      ./configure --prefix=${savelocation}/usr     \
+                  --host=$(uname -m)-lfs-linux-gnu \
+                  --build=$(${xz_dir}/${xz_pkg}/build-aux/config.guess)
+    popd
     case $opt_one_job in
       1)
         make -C ${xz_dir}/${xz_pkg}
@@ -1925,16 +1962,17 @@ case $save_temp_binutils in
     esac
     sed '6009s/$add_dir//' -i ${binutils_dir}/${binutils_pkg}/ltmain.sh
     # Build & install
-    ${binutils_dir}/${binutils_pkg}/configure               \
-    --prefix=${savelocation}/usr                            \
-    --build=$(${binutils_dir}/${binutils_pkg}/config.guess) \
-    --host=$(uname -m)-lfs-linux-gnu                        \
-    --disable-nls                                           \
-    --enable-shared                                         \
-    --enable-gprofng=no                                     \
-    --disable-werror                                        \
-    --enable-64-bit-bfd                                     \
-    --enable-default-hash-style=gnu
+    pushd ${binutils_dir}/${binutils_pkg}
+      ./configure --prefix=${savelocation}/usr                            \
+                  --build=$(${binutils_dir}/${binutils_pkg}/config.guess) \
+                  --host=$(uname -m)-lfs-linux-gnu                        \
+                  --disable-nls                                           \
+                  --enable-shared                                         \
+                  --enable-gprofng=no                                     \
+                  --disable-werror                                        \
+                  --enable-64-bit-bfd                                     \
+                  --enable-default-hash-style=gnu
+    popd
     case $opt_one_job in
       1)
         make -C ${binutils_dir}/${binutils_pkg}
@@ -2109,24 +2147,25 @@ case $save_temp_gcc in
     sed '/thread_header =/s/@.*@/gthr-posix.h/' \
       -i ${gcc_dir}/${gcc_pkg}/libgcc/Makefile.in ${gcc_dir}/${gcc_pkg}/libstdc++-v3/include/Makefile.in
     # Build & install
-    ${gcc_dir}/${gcc_pkg}/configure                                             \
-    --build=$(${gcc_dir}/${gcc_pkg}/config.guess)                               \
-    --host=$(uname -m)-lfs-linux-gnu                                            \
-    --target=$(uname -m)-lfs-linux-gnu                                          \
-    LDFLAGS_FOR_TARGET=-L${gcc_dir}/${gcc_pkg}/$(uname -m)-lfs-linux-gnu/libgcc \
-    --prefix=${savelocation}/usr                                                \
-    --with-build-sysroot=${savelocation}                                        \
-    --enable-default-pie                                                        \
-    --enable-default-ssp                                                        \
-    --disable-nls                                                               \
-    --disable-multilib                                                          \
-    --disable-libatomic                                                         \
-    --disable-libgomp                                                           \
-    --disable-libquadmath                                                       \
-    --disable-libsanitizer                                                      \
-    --disable-libssp                                                            \
-    --disable-libvtv                                                            \
-    --enable-languages=c,c++
+    pushd ${gcc_dir}/${gcc_pkg}
+      ./configure --build=$(${gcc_dir}/${gcc_pkg}/config.guess)                               \
+                  --host=$(uname -m)-lfs-linux-gnu                                            \
+                  --target=$(uname -m)-lfs-linux-gnu                                          \
+                  LDFLAGS_FOR_TARGET=-L${gcc_dir}/${gcc_pkg}/$(uname -m)-lfs-linux-gnu/libgcc \
+                  --prefix=${savelocation}/usr                                                \
+                  --with-build-sysroot=${savelocation}                                        \
+                  --enable-default-pie                                                        \
+                  --enable-default-ssp                                                        \
+                  --disable-nls                                                               \
+                  --disable-multilib                                                          \
+                  --disable-libatomic                                                         \
+                  --disable-libgomp                                                           \
+                  --disable-libquadmath                                                       \
+                  --disable-libsanitizer                                                      \
+                  --disable-libssp                                                            \
+                  --disable-libvtv                                                            \
+                  --enable-languages=c,c++
+    popd
     case $opt_one_job in
       1)
         make -C ${gcc_dir}/${gcc_pkg}
