@@ -114,7 +114,7 @@ error() {
   exit 1
 }
 
-# Error that is related to a corrupted save file
+# Corrupted save file error, '$1' is the save value that is not valid
 save-error() {
   echo -e "${error}Error: this save file is corrupted"
   echo -e "(\$$1 is equal to neither 1 or 0).${default}"
@@ -128,10 +128,18 @@ save-error() {
 if [[ -f $opt_save_file && ! -z "$opt_save_file" ]]; then
   source $opt_save_file
   fullsavename=$opt_save_file
-  mount ${savedevice}2 $savelocation        || true
-  mount ${savedevice}3 ${savelocation}/boot || true
+  swapon ${savedevice}1                      || true
+  mount  ${savedevice}2 $savelocation        || true
+  if mountpoint -q "${savedevice}2"; then
+    echo -e "${info}The directory '${savelocation}' is a mountpoint, ignoring the error.${default}"
+  else
+    exit 1
+  fi
+  mount  ${savedevice}3 ${savelocation}/boot || true
 else
-  echo -e "${warning}Save file not found, storing the path to possibly create it later.${default}"
+  if [[ ! -z "$opt_save_file" ]]; then
+    echo -e "${warning}Save file not found, storing the path to possibly create it later.${default}"
+  fi
 fi
 
 # Check whether the script is being run with sudo privileges
@@ -206,10 +214,11 @@ case $save_partitions in
           partitiontable=n
         fi
         decide-swap-size() {
-          echo -e "${info}Many machines need a swap partition (roughly pagefile), which is used by RAM."
-          echo    "When it starts to fill up, the operating system moves less frequently used processes or data"
-          echo -e "from RAM to the swap partition.${default}"
-          read -p "Choose the size of the swap partition (at least '2GB' is recommended, IEC (*bibytes) units are also supported):" swapsize
+          echo -e "${info}Many machines need a swap partition (roughly pagefile)."
+          echo    "Swap partition is a disk space which is used by system when it's out of RAM."
+          echo    "It's a secondary storage for processes which is significantly worse by speed."
+          echo -e "The total amount of the system's RAM is `free -t -h | grep Total | awk '{print $2}'`B"
+          read -p "Choose the size of the swap partition (at least 5GB of total (RAM + swap) memory is recommended, IEC (*iB) units are also supported):" swapsize
           if [[ -z "$swapsize" ]]; then
             decide-swap-size
           fi
@@ -245,7 +254,7 @@ case $save_partitions in
     if [ ! -z $opt_save_file ]; then
       if [ -f $opt_save_file ]; then
         # Remove all lines containing 'save_partitions'
-        sed '/save_partitions/d' $opt_save_file > $opt_save_file
+        echo "`sed '/save_partitions/d' $opt_save_file`" > $opt_save_file
         # Save the progress
         echo "save_partitions=1" >> $opt_save_file
       fi
@@ -320,10 +329,10 @@ save-argument() {
     fi
     fullsavename=${savelocation}/${savefilename}.sh
     touch $fullsavename
-    sed '/save_partitions/d' $fullsavename > $fullsavename
-    sed '/save_created/d'    $fullsavename > $fullsavename
-    sed '/savedevice/d'      $fullsavename > $fullsavename
-    sed '/savelocation/d'    $fullsavename > $fullsavename
+    echo "`sed '/save_partitions/d' $fullsavename`" > $fullsavename
+    echo "`sed '/save_created/d'    $fullsavename`" > $fullsavename
+    echo "`sed '/savedevice/d'      $fullsavename`" > $fullsavename
+    echo "`sed '/savelocation/d'    $fullsavename`" > $fullsavename
     echo -e "savedevice=$parteddevice\nsavelocation=$savelocation\nsave_partitions=1\nsave_created=1\n" >> $fullsavename
   fi
 }
@@ -345,7 +354,7 @@ case $save_created in
           fi
           case $createpath in
             [Yy])
-              mkdir $savelocation
+              mkdir -pv $savelocation
             ;;
             [Nn])
               exitorcontinue-func() {
@@ -378,8 +387,9 @@ case $save_created in
       fi
     }
     path-check
-    mount ${parteddevice}2 $savelocation
-    read  -p "Pick a name for the save file ('lfs-save' by default):" savefilename
+    swapon -v ${parteddevice}1
+    mount  -v ${parteddevice}2 $savelocation
+    read   -p "Pick a name for the save file ('lfs-save' by default):" savefilename
     if [[ -z "$savefilename" ]]; then
       savefilename=lfs-save
     fi
@@ -390,10 +400,10 @@ case $save_created in
       touch $fullsavename
     fi
     # Saving the progress in the save file
-    sed '/save_partitions/d' $fullsavename > $fullsavename
-    sed '/save_created/d'    $fullsavename > $fullsavename
-    sed '/savedevice/d'      $fullsavename > $fullsavename
-    sed '/savelocation/d'    $fullsavename > $fullsavename
+    echo "`sed '/save_partitions/d' $fullsavename`" > $fullsavename
+    echo "`sed '/save_created/d'    $fullsavename`" > $fullsavename
+    echo "`sed '/savedevice/d'      $fullsavename`" > $fullsavename
+    echo "`sed '/savelocation/d'    $fullsavename`" > $fullsavename
     echo -e "savedevice=$parteddevice\nsavelocation=$savelocation\nsave_partitions=1\nsave_created=1\n" >> $fullsavename # write certain variables to save file
     echo -e "${success}Save file successfully created.${default}"
   ;;
@@ -423,7 +433,7 @@ case $save_build_preparation in
     esac
     mkdir -pv ${savelocation}/tools
     
-    sed '/save_build_preparation/d' $fullsavename > $fullsavename
+    echo "`sed '/save_build_preparation/d'  $fullsavename`" > $fullsavename
     echo -e "save_build_preparation=1\n" >> $fullsavename
     echo -e "${success}System successfully prepared.${default}"
   ;;
@@ -492,7 +502,7 @@ case $save_cross_binutils in
         make -C ${binutils_dir}/${binutils_pkg}/ -j$(nproc)
         make -C ${binutils_dir}/${binutils_pkg}/ -j$(nproc) install
     esac
-    sed '/save_cross_binutils/d' $fullsavename > $fullsavename
+    echo "`sed '/save_cross_binutils/d'  $fullsavename`" > $fullsavename
     echo -e "save_cross_binutils=1\n" >> $fullsavename
     echo -e "${success}Binutils successfully installed for cross-compilation to '${savelocation}/tools'.${default}"
   ;;
@@ -539,7 +549,7 @@ case $save_cross_gcc in
     fi
     cd $gcc_dir
     echo -e "${info}Extracting ${gcc_latest}.tar.xz contents...${default}"
-    tar -xf ${gcc_dir}/$gcc_latest
+    tar -xf ${gcc_dir}/$gcc_latest.tar.xz
     cd $OLDPWD
     gcc_pkg=$(basename "${gcc_dir}/$gcc_latest" .tar.xz)
     # Obtain GNU Multiple Precision Floating-Point Reliable library (MPFR) source code
@@ -684,7 +694,7 @@ case $save_cross_gcc in
     cat ${gcc_dir}/${gcc_pkg}/gcc/limitx.h ${gcc_dir}/${gcc_pkg}/gcc/glimits.h ${gcc_dir}/${gcc_pkg}/gcc/limity.h > \
       `dirname $(${gcc_dir}/${gcc_pkg}/$(uname -m)-lfs-linux-gnu-gcc -print-libgcc-file-name)`/include/limits.h
     # Save progress
-    sed '/save_cross_gcc/d' $fullsavename > $fullsavename
+    echo "`sed '/save_cross_gcc/d'  $fullsavename`" > $fullsavename
     echo -e "save_cross_gcc=1\n" >> $fullsavename
     echo -e "${success}GCC successfully installed for cross-compilation to '${savelocation}/tools'.${default}"
   ;;
@@ -748,7 +758,7 @@ case $save_linux_headers in
     find    ${linux_dir}/${linux_pkg} -type f ! -name '*.h' -delete
     cp  -rv ${linux_dir}/${linux_pkg}/usr/include ${savelocation}/usr
     # Save progress
-    sed '/save_linux_headers/d' $fullsavename > $fullsavename
+    echo "`sed '/save_linux_headers/d'  $fullsavename`" > $fullsavename
     echo -e "save_linux_headers=1\n" >> $fullsavename
     echo -e "${success}Linux API Headers successfully installed.${default}"
   ;;
@@ -855,7 +865,7 @@ case $save_target_glibc in
     esac
     sed '/RTLDLIST=/s@/usr@@g' -i ${savelocation}/usr/bin/ldd
     # Save progress
-    sed '/save_target_glibc/d' $fullsavename > $fullsavename
+    echo "`sed '/save_target_glibc/d'  $fullsavename`" > $fullsavename
     echo -e "save_target_glibc=1\n" >> $fullsavename
     echo -e "${success}Glibc for cross-compilation successfully installed.${default}"
   ;;
@@ -895,7 +905,7 @@ case $save_target_libstdcpp in
     # Chapter 5.6.1
     rm -v ${savelocation}/usr/lib/lib{stdc++{,exp,fs},supc++}.la
     # Save progress
-    sed '/save_target_libstdcpp/d' $fullsavename > $fullsavename
+    echo "`sed '/save_target_libstdcpp/d'  $fullsavename`" > $fullsavename
     echo -e "save_target_libstdcpp=1\n" >> $fullsavename
     echo -e "${success}Temporary Libstdc++ successfully installed.${default}"
   ;;
@@ -960,7 +970,7 @@ case $save_temporary_m4 in
         make -C ${m4_dir}/${m4_pkg} -j$(nproc) DESTDIR=${savelocation} install
     esac
     # Save progress
-    sed '/save_temporary_m4/d' $fullsavename > $fullsavename
+    echo "`sed '/save_temporary_m4/d'  $fullsavename`" > $fullsavename
     echo -e "save_temporary_m4=1\n" >> $fullsavename
     echo -e "${success}Temporary GNU M4 macroprocessor successfully installed.${default}"
   ;;
@@ -1057,7 +1067,7 @@ case $save_temp_ncurses in
     sed -e 's/^#if.*XOPEN.*$/#if 1/' \
         -i ${savelocation}/usr/include/curses.h
     # Save progress
-    sed '/save_temp_ncurses/d' $fullsavename > $fullsavename
+    echo "`sed '/save_temp_ncurses/d'  $fullsavename`" > $fullsavename
     echo -e "save_temp_ncurses=1\n" >> $fullsavename
     echo -e "${success}Temporary Ncurses library successfully installed.${default}"
   ;;
@@ -1125,7 +1135,7 @@ case $save_temp_bash in
     # Chapter 6.4.1
     ln -sv ${bash_dir}/${bash_pkg}/bash ${savelocation}/bin/sh
     # Save progress
-    sed '/save_temp_bash/d' $fullsavename > $fullsavename
+    echo "`sed '/save_temp_bash/d'  $fullsavename`" > $fullsavename
     echo -e "save_temp_bash=1\n" >> $fullsavename
     echo -e "${success}Temporary Bash shell successfully installed.${default}"
   ;;
@@ -1196,7 +1206,7 @@ case $save_temp_coreutils in
     mv    -v  ${savelocation}/usr/share/man/man1/chroot.1 ${savelocation}/usr/share/man/man8/chroot.8
     sed   -i  's/"1"/"8"/'                                ${savelocation}/usr/share/man/man8/chroot.8
     # Save progress
-    sed '/save_temp_coreutils/d' $fullsavename > $fullsavename
+    echo "`sed '/save_temp_coreutils/d'  $fullsavename`" > $fullsavename
     echo -e "save_temp_coreutils=1\n" >> $fullsavename
     echo -e "${success}Temporary GNU Coreutils successfully installed.${default}"
   ;;
@@ -1261,7 +1271,7 @@ case $save_temp_diffutils in
         make -C ${diffutils_dir}/${diffutils_pkg} -j$(nproc) DESTDIR=${savelocation} install
     esac
     # Save progress
-    sed '/save_temp_diffutils/d' $fullsavename > $fullsavename
+    echo "`sed '/save_temp_diffutils/d'  $fullsavename`" > $fullsavename
     echo -e "save_temp_diffutils=1\n" >> $fullsavename
     echo -e "${success}Temporary GNU Diffutils successfully installed.${default}"
   ;;
@@ -1346,7 +1356,7 @@ case $save_temp_file in
     esac
     rm -v ${savelocation}/usr/lib/libmagic.la
     # Save progress
-    sed '/save_temp_file/d' $fullsavename > $fullsavename
+    echo "`sed '/save_temp_file/d'  $fullsavename`" > $fullsavename
     echo -e "save_temp_file=1\n" >> $fullsavename
     echo -e "${success}Temporary Ian Darwin's Free File Command successfully installed.${default}"
   ;;
@@ -1412,7 +1422,7 @@ case $save_temp_findutils in
         make -C ${findutils_dir}/${findutils_pkg} -j$(nproc) DESTDIR=${savelocation} install
     esac
     # Save progress
-    sed '/save_temp_findutils/d' $fullsavename > $fullsavename
+    echo "`sed '/save_temp_findutils/d'  $fullsavename`" > $fullsavename
     echo -e "save_temp_findutils=1\n" >> $fullsavename
     echo -e "${success}Temporary GNU Findutils successfully installed.${default}"
   ;;
@@ -1479,7 +1489,7 @@ case $save_temp_gawk in
         make -C ${gawk_dir}/${gawk_pkg} -j$(nproc) DESTDIR=${savelocation} install
     esac
     # Save progress
-    sed '/save_temp_gawk/d' $fullsavename > $fullsavename
+    echo "`sed '/save_temp_gawk/d'  $fullsavename`" > $fullsavename
     echo -e "save_temp_gawk=1\n" >> $fullsavename
     echo -e "${success}Temporary GNU awk successfully installed.${default}"
   ;;
@@ -1544,7 +1554,7 @@ case $save_temp_grep in
         make -C ${grep_dir}/${grep_pkg} -j$(nproc) DESTDIR=${savelocation} install
     esac
     # Save progress
-    sed '/save_temp_grep/d' $fullsavename > $fullsavename
+    echo "`sed '/save_temp_grep/d'  $fullsavename`" > $fullsavename
     echo -e "save_temp_grep=1\n" >> $fullsavename
     echo -e "${success}Temporary GNU Grep successfully installed.${default}"
   ;;
@@ -1608,7 +1618,7 @@ case $save_temp_gzip in
         make -C ${gzip_dir}/${gzip_pkg} -j$(nproc) DESTDIR=${savelocation} install
     esac
     # Save progress
-    sed '/save_temp_gzip/d' $fullsavename > $fullsavename
+    echo "`sed '/save_temp_gzip/d'  $fullsavename`" > $fullsavename
     echo -e "save_temp_gzip=1\n" >> $fullsavename
     echo -e "${success}Temporary GNU Gzip successfully installed.${default}"
   ;;
@@ -1674,7 +1684,7 @@ case $save_temp_make in
         make -C ${make_dir}/${make_pkg} -j$(nproc) DESTDIR=${savelocation} install
     esac
     # Save progress
-    sed '/save_temp_make/d' $fullsavename > $fullsavename
+    echo "`sed '/save_temp_make/d'  $fullsavename`" > $fullsavename
     echo -e "save_temp_make=1\n" >> $fullsavename
     echo -e "${success}Temporary GNU Make successfully installed.${default}"
   ;;
@@ -1739,7 +1749,7 @@ case $save_temp_patch in
         make -C ${patch_dir}/${patch_pkg} -j$(nproc) DESTDIR=${savelocation} install
     esac
     # Save progress
-    sed '/save_temp_patch/d' $fullsavename > $fullsavename
+    echo "`sed '/save_temp_patch/d'  $fullsavename`" > $fullsavename
     echo -e "save_temp_patch=1\n" >> $fullsavename
     echo -e "${success}Temporary GNU Patch successfully installed.${default}"
   ;;
@@ -1804,7 +1814,7 @@ case $save_temp_sed in
         make -C ${sed_dir}/${sed_pkg} -j$(nproc) DESTDIR=${savelocation} install
     esac
     # Save progress
-    sed '/save_temp_sed/d' $fullsavename > $fullsavename
+    echo "`sed '/save_temp_sed/d'  $fullsavename`" > $fullsavename
     echo -e "save_temp_sed=1\n" >> $fullsavename
     echo -e "${success}Temporary GNU Streamline Editor successfully installed.${default}"
   ;;
@@ -1869,7 +1879,7 @@ case $save_temp_tar in
         make -C ${tar_dir}/${tar_pkg} -j$(nproc) DESTDIR=${savelocation} install
     esac
     # Save progress
-    sed '/save_temp_tar/d' $fullsavename > $fullsavename
+    echo "`sed '/save_temp_tar/d'  $fullsavename`" > $fullsavename
     echo -e "save_temp_tar=1\n" >> $fullsavename
     echo -e "${success}Temporary GNU Tar successfully installed.${default}"
   ;;
@@ -1936,7 +1946,7 @@ case $save_temp_xz in
         make -C ${tar_dir}/${xz_pkg} -j$(nproc) DESTDIR=${savelocation} install
     esac
     # Save progress
-    sed '/save_temp_xz/d' $fullsavename > $fullsavename
+    echo "`sed '/save_temp_xz/d'  $fullsavename`" > $fullsavename
     echo -e "save_temp_xz=1\n" >> $fullsavename
     echo -e "${success}Temporary Xz Utils successfully installed.${default}"
   ;;
@@ -1984,7 +1994,7 @@ case $save_temp_binutils in
     esac
     rm -v ${savelocation}/usr/lib/lib{bfd,ctf,ctf-nobfd,opcodes,sframe}.{a,la}
     # Save progress
-    sed '/save_temp_binutils/d' $fullsavename > $fullsavename
+    echo "`sed '/save_temp_binutils/d'  $fullsavename`" > $fullsavename
     echo -e "save_temp_binutils=1\n" >> $fullsavename
     echo -e "${success}Temporary GNU Binutils successfully installed.${default}"
   ;;
@@ -2177,7 +2187,7 @@ case $save_temp_gcc in
     esac
     ln -sv ${gcc_dir}/${gcc_pkg}/gcc ${savelocation}/usr/bin/cc
     # Save progress
-    sed '/save_temp_gcc/d' $fullsavename > $fullsavename
+    echo "`sed '/save_temp_gcc/d'  $fullsavename`" > $fullsavename
     echo -e "save_temp_gcc=1\n" >> $fullsavename
     echo -e "${success}Temporary GNU Compiler Collection successfully installed.${default}"
   ;;

@@ -12,4 +12,4 @@ systemctl start pacman-init.service
 chmod a+rwx /usr/local/bin/lfs-install
 # The system being a weirdo
 echo "Updating CA certificates..."
-update-ca-certificates
+update-ca-trust
