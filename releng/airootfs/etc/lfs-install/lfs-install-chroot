@@ -1,0 +1,494 @@
+#! /bin/bash
+# lfs-install-chroot - final system installation
+# Copyright (C) 2023 Beloglazov Mark <justaguy3331@gmail.com>
+#
+# This program is free software: you can redistribute it and/or modify it under
+# the of the GNU General Public License as published by the Free Software
+# Foundation, either version 3 of the License, or (at your option) any later
+# version.
+#
+# This program is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of  MERCHANTABILITY or FITNESS
+# FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along with
+# this program.  If not, see <http://www.gnu.org/licenses/>.
+set -e
+# Color codes for texts
+success="\e[0;96m" # High intensity cyan
+warning="\e[0;93m" # High intensity yellow
+error="\e[0;91m"   # High intensity red
+info="\e[0;97m"    # High intensity white
+default="\e[0m"    # White unless you modify the default shell color
+
+# Read the arguments for lfs-install
+args=$(getopt -a --options d:fhjks:l --long "debug:,full-save,help,one-job,keep-going,save-file:,license" -- "$@")
+if [ $? -ne 0 ]; then
+  echo "Use '-h' or '--help' for usage."
+  exit 1
+fi
+eval set -- "$args"
+
+while true; do
+  case "$1" in
+# -d <var> --debug <var>
+# a - print everything
+# b - only print current stage of installation
+# v - print which scripts and Makefile recipes were invoked and when they exited
+# j - print which sub-commands were invoked and when they exited
+# p - print which directories were invoked
+# n - print no debugging information
+  -d|--debug)
+    opt_debug="$2"
+    shift 2;;
+# -f --full-save
+  -f|--full-save)
+    opt_full_save="1"
+    shift 1;;
+
+# -h --help
+  -h|--help)
+    echo "Usage:"
+    echo " lfs-install-chroot [-d <opt_debug>] [-h] [-j] [-i] [-k] [-s <filename>] [-l]"
+    echo ""
+    echo "Finish installing Linux From Scratch to the current drive."
+    echo ""
+    echo "Options:"
+    echo " -d, --debug <opt_debug>    filter debug messages by a desired level"
+    echo " -f, --full-save            store all save variables in a savefile"
+    echo " -h, --help                 display this help and exit"
+    echo " -j, --one-job              do not use 'make -j\$(nproc)' option while building, should be used for debugging"
+    echo " -k, --keep-going           keep going if any error happens, very dangerous option"
+    echo " -s, --save-file <filename> define a filename or path to save file, or start with a new save file"
+    echo " -l, --license              show script license"
+    echo ""
+    echo "The 'opt_debug' argument can be 'a' (all), 'b' (currently active stage, see save variables for names),"
+    echo "'j' (print which sub-commands are currently invoked),"
+    echo "'p' (print which directory is currently invoked),"
+    echo "'n' (print no debugging information)."
+    echo ""
+    echo "The 'filename' argument can be a path to existing savefile, or a path to a new one."
+    echo "lfs-install will prompt user for creating new file (recursively) if it doesn't exist"
+    echo "while also informing of nonexistent directories."
+    exit 0;;
+
+# -j --one-job
+  -j|--one-job)
+    opt_one_job=1
+    shift 1;;
+
+# -k --keep-going
+  -k|--keep-going)
+    set +e
+    shift 1;;
+
+# -s <var> --save-file <var>
+# Note that this works only if your internal storage is complete.
+# If not, the script will store the var and wait.
+  -s|--save-file)
+    opt_save_file="$2"
+    shift 2;;
+
+# -l --license
+  -l|--license)
+    echo -e "${info}Please note that you can always exit by pressing 'q'.${default}"
+    read -p "Press enter to continue."
+    less /usr/local/share/doc/lfs-install/LICENSE
+    exit 0;;
+  --)
+    break;;
+  esac
+done
+
+echo "lfs-install-chroot Copyright (C) 2023 Beloglazov Mark <justaguy3331@gmail.com>
+
+This program comes with ABSOLUTELY NO WARRANTY;
+for details use '-l' or '--license' options.
+This is free software, and you are welcome to redistribute it
+under certain conditions; use '-l' or '--license' options for details.
+"
+
+# Simple error function to reduce code size
+error() {
+  echo -e "${error}Error:" $1
+  exit 1
+}
+
+# Corrupted save file error, '$1' is the save value that is not valid
+save-error() {
+  echo -e "${error}Error: this save file is corrupted"
+  echo -e "(\$$1 is equal to neither 1 or 0).${default}"
+  echo -e "${info}You might want to edit the save file using 'nano'"
+  echo -e "(the full location of the save file is $opt_save_file)."
+  echo -e "Please note that "1" means the stage is done, and "0" means the stage is not done.${default}"
+  exit 1
+}
+
+# Load save file if it exists
+if [[ -f $opt_save_file && ! -z "$opt_save_file" ]]; then
+  source $opt_save_file
+  fullsavename=$opt_save_file
+  swapon ${savedevice}1                      || true
+  if [[ -z "`cat /proc/swaps | grep ${savedevice}1`" ]]; then
+    exit 1
+  fi
+else
+  if [[ ! -z "$opt_save_file" ]]; then
+    echo -e "${warning}Save file not found, storing the path to possibly create it later.${default}"
+  fi
+fi
+
+# Check whether the script is being run with sudo privileges
+sudocheck=$(whoami)
+if [[ -z "$sudocheck" ]]; then
+  error "The result of 'whoami' is empty. Perhaps your are running in chroot?${default}"
+fi
+case $sudocheck in
+  root)
+    echo -e "${success}Running as sudo (root).${default}"
+  ;;
+  *)
+    error "You must be running this script with sudo (root) privileges.${default}"
+  ;;
+esac
+
+# Chapter 7.5
+if [[ -z "$save_chroot_dirs" ]]; then
+  save_chroot_dirs=0
+fi
+case $save_chroot_dirs in
+  1)
+  ;;
+  0)
+    mkdir   -pv  /{boot,home,mnt,opt,srv}
+    mkdir   -pv  /etc/{opt,sysconfig}
+    mkdir   -pv  /lib/firmware
+    mkdir   -pv  /media/{floppy,cdrom}
+    mkdir   -pv  /usr/{,local/}{include,src}
+    mkdir   -pv  /usr/local/{bin,lib,sbin}
+    mkdir   -pv  /usr/{,local/}share/{color,dict,doc,info,locale,man}
+    mkdir   -pv  /usr/{,local/}share/{misc,terminfo,zoneinfo}
+    mkdir   -pv  /usr/{,local/}share/man/man{1..8}
+    mkdir   -pv  /var/{cache,local,log,mail,opt,spool}
+    mkdir   -pv  /var/lib/{color,misc,locate}
+    ln      -sfv /run      /var/run
+    ln      -sfv /run/lock /var/lock
+    install -dv -m 0750    /root
+    install -dv -m 1777    /tmp /var/tmp
+    # Save progress
+    echo "`sed '/save_chroot_dirs/d'  $fullsavename`" > $fullsavename
+    echo -e "save_chroot_dirs=1\n" >> $fullsavename
+    echo -e "${success}Minimal File Hierarchy System directories created.${default}"
+  ;;
+  *)
+    save-error "save_chroot_dirs"
+esac
+
+# Chapter 7.6
+if [[ -z "$save_chroot_files" ]]; then
+  save_chroot_files=0
+fi
+case $save_chroot_files in
+  1)
+  ;;
+  0)
+    ln -sv /proc/self/mounts /etc/mtab
+    # Create /etc/hosts
+    echo '127.0.0.1 localhost $(hostname)' >  /etc/hosts
+    echo '::1       localhost'             >> /etc/hosts
+    # Create /etc/passwd
+    echo 'root:x:0:0:root:/root:/bin/bash'                                       >  /etc/passwd
+    echo 'bin:x:1:1:bin:/dev/null:/usr/bin/false'                                >> /etc/passwd
+    echo 'daemon:x:6:6:Daemon User:/dev/null:/usr/bin/false'                     >> /etc/passwd
+    echo 'messagebus:x:18:18:D-Bus Message Daemon User:/run/dbus:/usr/bin/false' >> /etc/passwd
+    echo 'uuidd:x:80:80:UUID Generation Daemon User:/dev/null:/usr/bin/false'    >> /etc/passwd
+    echo 'nobody:x:65534:65534:Unprivileged User:/dev/null:/usr/bin/false'       >> /etc/passwd
+    # Create /etc/group
+    echo 'root:x:0:'        >  /etc/group
+    echo 'bin:x:1:daemon'   >> /etc/group
+    echo 'sys:x:2:'         >> /etc/group
+    echo 'kmem:x:3:'        >> /etc/group
+    echo 'tape:x:4:'        >> /etc/group
+    echo 'tty:x:5:'         >> /etc/group
+    echo 'daemon:x:6:'      >> /etc/group
+    echo 'floppy:x:7:'      >> /etc/group
+    echo 'disk:x:8:'        >> /etc/group
+    echo 'lp:x:9:'          >> /etc/group
+    echo 'dialout:x:10:'    >> /etc/group
+    echo 'audio:x:11:'      >> /etc/group
+    echo 'video:x:12:'      >> /etc/group
+    echo 'utmp:x:13:'       >> /etc/group
+    echo 'cdrom:x:15:'      >> /etc/group
+    echo 'adm:x:16:'        >> /etc/group
+    echo 'messagebus:x:18:' >> /etc/group
+    echo 'input:x:24:'      >> /etc/group
+    echo 'mail:x:34:'       >> /etc/group
+    echo 'kvm:x:61:'        >> /etc/group
+    echo 'uuidd:x:80:'      >> /etc/group
+    echo 'wheel:x:97:'      >> /etc/group
+    echo 'users:x:999:'     >> /etc/group
+    echo 'nogroup:x:65534:' >> /etc/group
+    # Creating a regular user
+    echo "TrustedInstaller:x:101:101::/home/TrustedInstaller:/bin/bash" >> /etc/passwd
+    echo "TrustedInstaller:x:101:" >> /etc/group
+    install -o TrustedInstaller -d /home/TrustedInstaller
+    # Save progress
+    echo "`sed '/save_chroot_files/d'  $fullsavename`" > $fullsavename
+    echo -e "save_chroot_files=1\n" >> $fullsavename
+    echo -e "${info}Restarting the shell, please do not cancel this process...${default}"
+    # Here we go again
+    chroot_options=""
+    if [[ -z "$opt_debug" ]]; then
+      chroot_options="$chroot_options -d $opt_debug"
+    fi
+    case $opt_full_save in
+      1)
+        chroot_options="$chroot_options -f"
+    esac
+    case $opt_one_job in
+      1)
+        chroot_options="$chroot_options -j"
+    esac
+    case $opt_keep_going in
+      1)
+        chroot_options="$chroot_options -k"
+    esac
+    if [[ -z "$opt_save_file" ]]; then
+      chroot_options="$chroot_options -s ${opt_save_file#$savelocation}"
+    fi
+    exec /usr/bin/bash --login lfs-install-chroot $chroot_options
+  ;;
+  *)
+    save-error "save_chroot_files"
+esac
+
+# Chapter 7.6, after shell restart
+if [[ -z "$save_chroot_files_restart" ]]; then
+  save_chroot_files_restart=0
+fi
+case $save_chroot_files_restart in
+  1)
+  ;;
+  0)
+    echo -e "${success}Done!${default}"
+    touch /var/log/{btmp,lastlog,faillog,wtmp}
+    chgrp -v utmp /var/log/lastlog
+    chmod -v 664  /var/log/lastlog
+    chmod -v 600  /var/log/btmp
+    # Save progress
+    echo "`sed '/save_chroot_files_restart/d'  $fullsavename`" > $fullsavename
+    echo -e "save_chroot_files_restart=1\n" >> $fullsavename
+    echo -e "${success}Done creating essential files.${default}"
+  ;;
+  *)
+    save-error "save_chroot_files_restart"
+esac
+
+# GNU gettext utilities
+if [[ -z "$save_temp_gettext" ]]; then
+  save_temp_gettext=0
+fi
+case $save_temp_gettext in
+  1)
+  ;;
+  0)
+    gettext_dir=/sources/gettext
+    gettext_pkg=$(basename "`ls $gettext_dir | grep util-linux*/`" /)
+    pushd ${gettext_dir}/$gettext_pkg
+      ./configure --disable-shared
+    popd
+    case $opt_one_job in
+      1)
+        make -C ${gettext_dir}/$gettext_pkg
+      ;;
+      *)
+        make -C ${gettext_dir}/$gettext_pkg -j$(nproc)
+    esac
+    cp -v ${gettext_dir}/${gettext_pkg}/gettext-tools/src/{msgfmt,msgmerge,xgettext} /usr/bin
+    # Save progress
+    echo "`sed '/save_temp_gettext/d'  $fullsavename`" > $fullsavename
+    echo -e "save_temp_gettext=1\n" >> $fullsavename
+    echo -e "${success}GNU gettext utilities successfully installed.${default}"
+  ;;
+  *)
+    save-error "save_temp_gettext"
+esac
+
+# GNU Bison
+if [[ -z "$save_temp_bison" ]]; then
+  save_temp_bison=0
+fi
+case $save_temp_bison in
+  1)
+  ;;
+  0)
+    bison_dir=/sources/bison
+    bison_pkg=$(basename "`ls $bison_dir | grep bison*/`" /)
+    pushd ${bison_dir}/$bison_pkg
+      ./configure --prefix=/usr \
+                  --docdir=/usr/share/doc/bison-3.8.2
+    popd
+    case $opt_one_job in
+      1)
+        make -C ${bison_dir}/$bison_pkg
+        make -C ${bison_dir}/$bison_pkg install
+      ;;
+      *)
+        make -C ${bison_dir}/$bison_pkg -j$(nproc)
+        make -C ${bison_dir}/$bison_pkg -j$(nproc) install
+    esac
+  ;;
+  *)
+    save-error "save_temp_bison"
+esac
+
+# Perl programming language
+if [[ -z "$save_temp_perl" ]]; then
+  save_temp_perl=0
+fi
+case $save_temp_perl in
+  1)
+  ;;
+  0)
+    perl_dir=/sources/perl
+    perl_pkg=$(basename "`ls $perl_dir | grep perl*/`" /)
+    # Perl seems to have its own configure script, but still not going to trust it where to put build configuration files in
+    pushd ${perl_dir}/$perl_pkg
+      sh Configure -des                                        \
+                   -Dprefix=/usr                               \
+                   -Dvendorprefix=/usr                         \
+                   -Duseshrplib                                \
+                   -Dprivlib=/usr/lib/perl5/5.38/core_perl     \
+                   -Darchlib=/usr/lib/perl5/5.38/core_perl     \
+                   -Dsitelib=/usr/lib/perl5/5.38/site_perl     \
+                   -Dsitearch=/usr/lib/perl5/5.38/site_perl    \
+                   -Dvendorlib=/usr/lib/perl5/5.38/vendor_perl \
+                   -Dvendorarch=/usr/lib/perl5/5.38/vendor_perl
+    popd
+    case $opt_one_job in
+      1)
+        make -C ${perl_dir}/$perl_pkg
+        make -C ${perl_dir}/$perl_pkg install
+      ;;
+      *)
+        make -C ${perl_dir}/$perl_pkg -j$(nproc)
+        make -C ${perl_dir}/$perl_pkg -j$(nproc) install
+    esac
+  ;;
+  *)
+    save-error "save_temp_perl"
+esac
+
+# Python programming language
+if [[ -z "$save_temp_python" ]]; then
+  save_temp_python=0
+fi
+case $save_temp_python in
+  1)
+  ;;
+  0)
+    python_dir=/sources/python
+    python_pkg=$(basename "`ls $python_dir | grep python*/`" /)
+    pushd ${python_dir}/$python_pkg
+      ./configure --prefix=/usr   \
+                  --enable-shared \
+                  --without-ensurepip
+    popd
+    case $opt_one_job in
+      1)
+        make -C ${python_dir}/$python_pkg
+        make -C ${python_dir}/$python_pkg install
+      ;;
+      *)
+        make -C ${python_dir}/$python_pkg -j$(nproc)
+        make -C ${python_dir}/$python_pkg -j$(nproc) install
+    esac
+  ;;
+  *)
+    save-error "save_temp_python"
+esac
+
+# GNU Texinfo documentation system
+if [[ -z "$save_temp_texinfo" ]]; then
+  save_temp_texinfo=0
+fi
+case $save_temp_texinfo in
+  1)
+  ;;
+  0)
+    texinfo_dir=/sources/texinfo
+    texinfo_pkg=$(basename "`ls $texinfo_dir | grep texinfo*/`" /)
+    pushd ${texinfo_dir}/$texinfo_pkg
+      ./configure --prefix=/usr
+    popd
+    case $opt_one_job in
+      1)
+        make -C ${texinfo_dir}/$texinfo_pkg
+        make -C ${texinfo_dir}/$texinfo_pkg install
+      ;;
+      *)
+        make -C ${texinfo_dir}/$texinfo_pkg -j$(nproc)
+        make -C ${texinfo_dir}/$texinfo_pkg -j$(nproc) install
+    esac
+  ;;
+  *)
+    save-error "save_temp_texinfo"
+esac
+
+# util-linux package
+if [[ -z "$save_temp_util_linux" ]]; then
+  save_temp_util_linux=0
+fi
+case $save_temp_util_linux in
+  1)
+  ;;
+  0)
+    util_linux_dir=/sources/util-linux
+    util_linux_pkg=$(basename "`ls $util_linux_dir | grep util-linux*/`" /)
+    pushd ${util_linux_dir}/$util_linux_pkg
+      ./configure --libdir=/usr/lib    \
+                  --runstatedir=/run   \
+                  --disable-chfn-chsh  \
+                  --disable-login      \
+                  --disable-nologin    \
+                  --disable-su         \
+                  --disable-setpriv    \
+                  --disable-runuser    \
+                  --disable-pylibmount \
+                  --disable-static     \
+                  --without-python     \
+                  ADJTIME_PATH=/var/lib/hwclock/adjtime \
+                  --docdir=/usr/share/doc/util-linux-2.39.3
+    popd
+    case $opt_one_job in
+      1)
+        make -C ${util_linux_dir}/$util_linux_pkg
+        make -C ${util_linux_dir}/$util_linux_pkg install
+      ;;
+      *)
+        make -C ${util_linux_dir}/$util_linux_pkg -j$(nproc)
+        make -C ${util_linux_dir}/$util_linux_pkg -j$(nproc) install
+    esac
+  ;;
+  *)
+    save-error "save_temp_util_linux"
+esac
+
+# Chapter 7.13
+if [[ -z "$save_chroot_cleanup" ]]; then
+  save_chroot_cleanup=0
+fi
+case $save_chroot_cleanup in
+  1)
+  ;;
+  0)
+    echo -e "${info}Removing the currently installed documentation files...${default}"
+    rm -rf /usr/share/{info,man,doc}/*
+    echo -e "${info}Removing libtool .la files...${default}"
+    find /usr/{lib,libexec} -name \*.la -delete
+    echo -e "${info}Removing the /tools directory...${default}"
+    rm -rf /tools
+  ;;
+  *)
+    save-error "save_chroot_cleanup"
+esac
