@@ -2498,7 +2498,7 @@ case $save_download_additional in
     mkdir -pv $texinfo_dir
     texinfo_repo="https://ftp.gnu.org/gnu/texinfo/"
     texinfo_latest=$(curl -s "${texinfo_repo}" | grep -Eo '(texinfo-[0-9]+([.][0-9]*)*)+.tar.xz' | sort -V | tail -1)
-    curl ${bison_repo}/$texinfo_latest --output ${texinfo_dir}/${texinfo_latest}
+    curl ${texinfo_repo}/$texinfo_latest --output ${texinfo_dir}/${texinfo_latest}
     checksum=`sha512sum ${texinfo_dir}/${texinfo_latest} | awk '{print $1}'`
     if [ "$checksum" != "`cat /etc/lfs-install/texinfo.sha512`" ]; then
       echo -e "${warning}Warning: the SHA-512 checksum of $texinfo_latest does not match the trusted one."
@@ -2569,6 +2569,1783 @@ case $save_download_additional in
     save-error "save_download_additional"
 esac
 
+# Download final Linux From Scratch packages
+if [[ -z "$save_download_final" ]]; then
+  save_download_final=0
+fi
+case $save_download_final in
+  1)
+  ;;
+  0)
+    # Linux Man-pages (2400 pages of various documentation related to Linux programming and maintaining the system)
+    man_pages_dir=${savelocation}/sources/man-pages
+    mkdir -pv $man_pages_dir
+    man_pages_repo="https://mirrors.edge.kernel.org/pub/linux/docs/man-pages/"
+    man_pages_latest=$(curl -s "${man_pages_repo}" | grep -Eo '(man-pages-[0-9]+([.][0-9]*)*)+.tar.xz' | sort -V | tail -1)
+    curl ${man_pages_repo}/$man_pages_latest --output ${man_pages_dir}/${man_pages_latest}
+    checksum=`sha512sum ${man_pages_dir}/${man_pages_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/man-pages.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $man_pages_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$man_pages_latest' might have malicious content inside.${default}"
+      man_pages_invalid_func() {
+        read -p "Proceed anyway? (y,N):" man_pages_invalid
+        if [[ -z "$man_pages_invalid" ]]; then
+          man_pages_invalid=n
+        fi
+        case $man_pages_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) temporary Linux Man-pages.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            man_pages_invalid_func
+        esac
+      }
+      man_pages_invalid_func
+    fi
+    cd $man_pages_dir
+    echo -e "${info}Extracting $man_pages_latest contents...${default}"
+    tar -xf ${man_pages_dir}/${man_pages_latest}
+    cd $OLDPWD
+    # Iana-Etc package
+    iana_etc_dir=${savelocation}/sources/iana-etc
+    mkdir -pv $iana_etc_dir
+    # Fixed version
+    iana_etc_repo="https://github.com/Mic92/iana-etc/releases/download/20240125/iana-etc-20240125.tar.gz"
+    iana_etc_latest=iana-etc-20240125
+    curl $iana_etc_repo --output ${iana_etc_dir}/${iana_etc_latest}.tar.gz
+    checksum=`sha512sum ${iana_etc_dir}/${iana_etc_latest}.tar.gz | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/iana-etc.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of ${iana_etc_latest}.tar.gz does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '${iana_etc_latest}.tar.gz' might have malicious content inside.${default}"
+      iana_etc_invalid_func() {
+        read -p "Proceed anyway? (y,N):" iana_etc_invalid
+        if [[ -z "$iana_etc_invalid" ]]; then
+          iana_etc_invalid=n
+        fi
+        case $iana_etc_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) temporary Iana-Etc package.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            iana_etc_invalid_func
+        esac
+      }
+      iana_etc_invalid_func
+    fi
+    cd $iana_etc_dir
+    echo -e "${info}Extracting ${iana_etc_latest}.tar.gz contents...${default}"
+    tar -xf ${iana_etc_dir}/${iana_etc_latest}.tar.gz
+    cd $OLDPWD
+    # Zlib, A Massively Spiffy Yet Delicately Unobtrusive Compression Library
+    zlib_dir=${savelocation}/sources/zlib
+    mkdir -pv $zlib_dir
+    zlib_repo="https://www.zlib.net/fossils/"
+    zlib_latest=$(curl -s "${zlib_repo}" | grep -Eo '(zlib-[0-9]+([.][0-9]*)*)+.tar.gz' | sort -V | tail -1)
+    curl ${zlib_repo}/$zlib_latest --output ${zlib_dir}/${zlib_latest}
+    checksum=`sha512sum ${zlib_dir}/${zlib_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/zlib.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $zlib_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$zlib_latest' might have malicious content inside.${default}"
+      zlib_invalid_func() {
+        read -p "Proceed anyway? (y,N):" zlib_invalid
+        if [[ -z "$zlib_invalid" ]]; then
+          zlib_invalid=n
+        fi
+        case $zlib_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) Zlib, A Massively Spiffy Yet Delicately Unobtrusive Compression Library.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            zlib_invalid_func
+        esac
+      }
+      zlib_invalid_func
+    fi
+    cd $zlib_dir
+    echo -e "${info}Extracting $zlib_latest contents...${default}"
+    tar -xf ${zlib_dir}/${zlib_latest}
+    cd $OLDPWD
+    # bzip2 data compressor
+    bzip2_dir=${savelocation}/sources/bzip2
+    mkdir -pv $bzip2_dir
+    bzip2_repo="https://sourceware.org/pub/bzip2/"
+    bzip2_latest=$(curl -s "${bzip2_repo}" | grep -Eo '(bzip2-[0-9]+([.][0-9]*)*)+.tar.gz' | sort -V | tail -1)
+    curl ${bzip2_repo}/$bzip2_latest --output ${bzip2_dir}/${bzip2_latest}
+    checksum=`sha512sum ${bzip2_dir}/${bzip2_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/bzip2.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $bzip2_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$bzip2_latest' might have malicious content inside.${default}"
+      bzip2_invalid_func() {
+        read -p "Proceed anyway? (y,N):" bzip2_invalid
+        if [[ -z "$bzip2_invalid" ]]; then
+          bzip2_invalid=n
+        fi
+        case $bzip2_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) bzip2 data compressor.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            bzip2_invalid_func
+        esac
+      }
+      bzip2_invalid_func
+    fi
+    cd $bzip2_dir
+    echo -e "${info}Extracting $bzip2_latest contents...${default}"
+    tar -xf ${bzip2_dir}/${bzip2_latest}
+    cd $OLDPWD
+    # Zstandard data compression algorithm
+    zstd_dir=${savelocation}/sources/zstd
+    mkdir -pv $zstd_dir
+    zstd_repo="https://github.com/facebook/zstd/releases"
+    # GitHub should provide oversimplified sites for downloading just like https://ftp.gnu.org/ did
+    zstd_latest=$(curl -s "${zstd_repo}" | grep -Eo 'Zstandard v([0-9]+([.][0-9]*)*)+' | sort -V | tail -1)
+    zstd_latest=${zstd_latest#Zstandard }
+    zstd_latest=${zstd_latest%'<'}
+    zstd_ver=${zstd_latest#v}
+    curl ${zstd_repo}/download/${zstd_latest}/zstd-${zstd_ver}.tar.gz --output ${zstd_dir}/zstd-${zstd_ver}.tar.gz
+    checksum=`sha512sum ${zstd_dir}/zstd-${zstd_ver} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/zstd.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of zstd-${zstd_ver}.tar.gz does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball 'zstd-${zstd_ver}.tar.gz' might have malicious content inside.${default}"
+      zstd_invalid_func() {
+        read -p "Proceed anyway? (y,N):" zstd_invalid
+        if [[ -z "$zstd_invalid" ]]; then
+          zstd_invalid=n
+        fi
+        case $zstd_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) Zstandard data compression algorithm.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            zstd_invalid_func
+        esac
+      }
+      zstd_invalid_func
+    fi
+    cd $zlib_dir
+    echo -e "${info}Extracting zstd-${zstd_ver}.tar.gz contents...${default}"
+    tar -xf ${zstd_dir}/zstd-${zstd_ver}.tar.gz
+    cd $OLDPWD
+    # GNU Readline library
+    readline_dir=${savelocation}/sources/readline
+    mkdir -pv $readline_dir
+    readline_repo="https://ftp.gnu.org/gnu/readline/"
+    readline_latest=$(curl -s "${readline_repo}" | grep -Eo '(readline-[0-9]+([.][0-9]*)*)+.tar.gz' | sort -V | tail -1)
+    curl ${readline_repo}/$readline_latest --output ${readline_dir}/${readline_latest}
+    checksum=`sha512sum ${readline_dir}/${readline_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/readline.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $readline_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$readline_latest' might have malicious content inside.${default}"
+      readline_invalid_func() {
+        read -p "Proceed anyway? (y,N):" readline_invalid
+        if [[ -z "$readline_invalid" ]]; then
+          readline_invalid=n
+        fi
+        case $readline_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) GNU Readline library.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            readline_invalid_func
+        esac
+      }
+      readline_invalid_func
+    fi
+    cd $readline_dir
+    echo -e "${info}Extracting $readline_latest contents...${default}"
+    tar -xf ${readline_dir}/${readline_latest}
+    cd $OLDPWD
+    # GNU bc arbitrary precision numeric processing language
+    bc_dir=${savelocation}/sources/bc
+    mkdir -pv $bc_dir
+    bc_repo="https://ftp.gnu.org/gnu/bc/"
+    bc_latest=$(curl -s "${bc_repo}" | grep -Eo '(bc-[0-9]+([.][0-9]*)*)+.tar.gz' | sort -V | tail -1)
+    curl ${bc_repo}/$bc_latest --output ${bc_dir}/${bc_latest}
+    checksum=`sha512sum ${bc_dir}/${bc_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/bc.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $bc_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$bc_latest' might have malicious content inside.${default}"
+      bc_invalid_func() {
+        read -p "Proceed anyway? (y,N):" bc_invalid
+        if [[ -z "$bc_invalid" ]]; then
+          bc_invalid=n
+        fi
+        case $bc_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) GNU bc arbitrary precision numeric processing language.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            bc_invalid_func
+        esac
+      }
+      bc_invalid_func
+    fi
+    cd $bc_dir
+    echo -e "${info}Extracting $bc_latest contents...${default}"
+    tar -xf ${bc_dir}/${bc_latest}
+    cd $OLDPWD
+    # flex, the Fast Lexical Analyzer
+    flex_dir=${savelocation}/sources/flex
+    mkdir -pv $flex_dir
+    # pain
+    flex_repo="https://github.com/westes/flex/releases"
+    flex_latest=$(curl -s "${flex_repo}" | grep -Eo 'flex v([0-9]+([.][0-9]*)*)+' | sort -V | tail -1)
+    flex_latest=${flex_latest#flex }
+    flex_latest=${flex_latest%'<'}
+    flex_ver=${flex_latest#v}
+    curl ${flex_repo}/download/${flex_latest}/flex-${flex_ver}.tar.gz --output ${flex_dir}/flex-${flex_ver}.tar.gz
+    checksum=`sha512sum ${flex_dir}/flex-${flex_ver} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/flex.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of flex-${flex_ver}.tar.gz does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball 'flex-${flex_ver}.tar.gz' might have malicious content inside.${default}"
+      flex_invalid_func() {
+        read -p "Proceed anyway? (y,N):" flex_invalid
+        if [[ -z "$flex_invalid" ]]; then
+          flex_invalid=n
+        fi
+        case $flex_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) flex, the Fast Lexical Analyzer.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            flex_invalid_func
+        esac
+      }
+      flex_invalid_func
+    fi
+    cd $flex_dir
+    echo -e "${info}Extracting flex-${flex_ver}.tar.gz contents...${default}"
+    tar -xf ${flex_dir}/flex-${flex_ver}.tar.gz
+    cd $OLDPWD
+    # Tool Command Language
+    tcl_dir=${savelocation}/sources/tcl
+    mkdir -pv $tcl_dir
+    # SourceForge turns out to be even more difficult than GitHub,
+    # because people here usually name version folders in format "X.X.X",
+    # and this messes up searching via `curl -s <repo>' even more
+    tcl_repo="https://downloads.sourceforge.net/tcl/tcl8.6.13-src.tar.gz"
+    tcl_latest=tcl8.6.13-src
+    curl --location ${tcl_repo} --output ${tcl_dir}/${tcl_latest}.tar.gz
+    checksum=`sha512sum ${tcl_dir}/${tcl_latest}.tar.gz | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/tcl.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of ${tcl_latest}.tar.gz does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '${tcl_latest}.tar.gz' might have malicious content inside.${default}"
+      tcl_invalid_func() {
+        read -p "Proceed anyway? (y,N):" tcl_invalid
+        if [[ -z "$tcl_invalid" ]]; then
+          tcl_invalid=n
+        fi
+        case $tcl_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) Tool Command Language.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            tcl_invalid_func
+        esac
+      }
+      tcl_invalid_func
+    fi
+    cd $tcl_dir
+    echo -e "${info}Extracting ${tcl_latest}.tar.gz contents...${default}"
+    tar -xf ${tcl_dir}/${tcl_latest}.tar.gz
+    cd $OLDPWD
+    # Expect package
+    expect_dir=${savelocation}/sources/expect
+    mkdir -pv $expect_dir
+    expect_repo="https://prdownloads.sourceforge.net/expect/expect5.45.4.tar.gz"
+    expect_latest=expect5.45.4
+    curl --location ${expect_repo} --output ${expect_dir}/${expect_latest}.tar.gz
+    checksum=`sha512sum ${expect_dir}/${expect_latest}.tar.gz | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/expect.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of ${expect_latest}.tar.gz does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '${expect_latest}.tar.gz' might have malicious content inside.${default}"
+      expect_invalid_func() {
+        read -p "Proceed anyway? (y,N):" expect_invalid
+        if [[ -z "$expect_invalid" ]]; then
+          expect_invalid=n
+        fi
+        case $expect_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) Expect package.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            expect_invalid_func
+        esac
+      }
+      expect_invalid_func
+    fi
+    cd $expect_dir
+    echo -e "${info}Extracting ${expect_latest}.tar.gz contents...${default}"
+    tar -xf ${expect_dir}/${expect_latest}.tar.gz
+    cd $OLDPWD
+    # DejaGNU framework
+    dejagnu_dir=${savelocation}/sources/dejagnu
+    mkdir -pv $dejagnu_dir
+    dejagnu_repo="https://ftp.gnu.org/gnu/dejagnu/"
+    dejagnu_latest=$(curl -s "${dejagnu_repo}" | grep -Eo '(dejagnu-[0-9]+([.][0-9]*)*)+.tar.gz' | sort -V | tail -1)
+    curl ${dejagnu_repo}/$dejagnu_latest --output ${dejagnu_dir}/${dejagnu_latest}
+    checksum=`sha512sum ${dejagnu_dir}/${dejagnu_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/dejagnu.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $dejagnu_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$dejagnu_latest' might have malicious content inside.${default}"
+      dejagnu_invalid_func() {
+        read -p "Proceed anyway? (y,N):" dejagnu_invalid
+        if [[ -z "$dejagnu_invalid" ]]; then
+          dejagnu_invalid=n
+        fi
+        case $dejagnu_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) DejaGNU framework.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            dejagnu_invalid_func
+        esac
+      }
+      dejagnu_invalid_func
+    fi
+    cd $dejagnu_dir
+    echo -e "${info}Extracting $dejagnu_latest contents...${default}"
+    tar -xf ${dejagnu_dir}/${dejagnu_latest}
+    cd $OLDPWD
+    # Pkgconf package
+    pkgconf_dir=${savelocation}/sources/pkgconf
+    mkdir -pv $pkgconf_dir
+    pkgconf_repo="https://distfiles.ariadne.space/pkgconf/"
+    pkgconf_latest=$(curl -s "${pkgconf_repo}" | grep -Eo '(pkgconf-[0-9]+([.][0-9]*)*)+.tar.xz' | sort -V | tail -1)
+    curl ${pkgconf_repo}/$pkgconf_latest --output ${pkgconf_dir}/${pkgconf_latest}
+    checksum=`sha512sum ${pkgconf_dir}/${pkgconf_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/pkgconf.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $pkgconf_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$pkgconf_latest' might have malicious content inside.${default}"
+      pkgconf_invalid_func() {
+        read -p "Proceed anyway? (y,N):" pkgconf_invalid
+        if [[ -z "$pkgconf_invalid" ]]; then
+          pkgconf_invalid=n
+        fi
+        case $pkgconf_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) Pkgconf package.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            pkgconf_invalid_func
+        esac
+      }
+      pkgconf_invalid_func
+    fi
+    cd $pkgconf_dir
+    echo -e "${info}Extracting $pkgconf_latest contents...${default}"
+    tar -xf ${pkgconf_dir}/${pkgconf_latest}
+    cd $OLDPWD
+    # Attr, Commands for Manipulating Filesystem Extended Attributes
+    attr_dir=${savelocation}/sources/attr
+    mkdir -pv $attr_dir
+    attr_repo="https://download.savannah.gnu.org/releases/attr/"
+    attr_latest=$(curl -s "${attr_repo}" | grep -Eo '(attr-[0-9]+([.][0-9]*)*)+.tar.xz' | sort -V | tail -1)
+    curl ${attr_repo}/$attr_latest --output ${attr_dir}/${attr_latest}
+    checksum=`sha512sum ${attr_dir}/${attr_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/attr.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $attr_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$attr_latest' might have malicious content inside.${default}"
+      attr_invalid_func() {
+        read -p "Proceed anyway? (y,N):" attr_invalid
+        if [[ -z "$attr_invalid" ]]; then
+          attr_invalid=n
+        fi
+        case $attr_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) Attr, Commands for Manipulating Filesystem Extended Attributes.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            attr_invalid_func
+        esac
+      }
+      attr_invalid_func
+    fi
+    cd $attr_dir
+    echo -e "${info}Extracting $attr_latest contents...${default}"
+    tar -xf ${attr_dir}/${attr_latest}
+    cd $OLDPWD
+    # Acl, Commands for Manipulating POSIX Access Control Lists
+    acl_dir=${savelocation}/sources/acl
+    mkdir -pv $acl_dir
+    acl_repo="https://download.savannah.gnu.org/releases/acl/"
+    acl_latest=$(curl -s "${acl_repo}" | grep -Eo '(acl-[0-9]+([.][0-9]*)*)+.tar.xz' | sort -V | tail -1)
+    curl ${acl_repo}/$acl_latest --output ${acl_dir}/${acl_latest}
+    checksum=`sha512sum ${acl_dir}/${acl_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/acl.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $acl_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$acl_latest' might have malicious content inside.${default}"
+      acl_invalid_func() {
+        read -p "Proceed anyway? (y,N):" acl_invalid
+        if [[ -z "$acl_invalid" ]]; then
+          acl_invalid=n
+        fi
+        case $acl_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) Acl, Commands for Manipulating POSIX Access Control Lists.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            acl_invalid_func
+        esac
+      }
+      acl_invalid_func
+    fi
+    cd $acl_dir
+    echo -e "${info}Extracting $acl_latest contents...${default}"
+    tar -xf ${acl_dir}/${acl_latest}
+    cd $OLDPWD
+    # Libcap, an implementation of the userspace interface to the POSIX 1003.1e capabilities
+    libcap_dir=${savelocation}/sources/libcap
+    mkdir -pv $libcap_dir
+    libcap_repo="https://mirrors.edge.kernel.org/pub/linux/libs/security/linux-privs/libcap2/"
+    libcap_latest=$(curl -s "${libcap_repo}" | grep -Eo '(libcap-[0-9]+([.][0-9]*)*)+.tar.xz' | sort -V | tail -1)
+    curl ${libcap_repo}/$libcap_latest --output ${libcap_dir}/${libcap_latest}
+    checksum=`sha512sum ${libcap_dir}/${libcap_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/libcap.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $libcap_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$libcap_latest' might have malicious content inside.${default}"
+      libcap_invalid_func() {
+        read -p "Proceed anyway? (y,N):" libcap_invalid
+        if [[ -z "$libcap_invalid" ]]; then
+          libcap_invalid=n
+        fi
+        case $libcap_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) Libcap, an implementation of the userspace interface to the POSIX 1003.1e capabilities.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            libcap_invalid_func
+        esac
+      }
+      libcap_invalid_func
+    fi
+    cd $libcap_dir
+    echo -e "${info}Extracting $libcap_latest contents...${default}"
+    tar -xf ${libcap_dir}/${libcap_latest}
+    cd $OLDPWD
+    # Libxcrypt, a modern library for one-way hashing of passwords
+    libxcrypt_dir=${savelocation}/sources/libxcrypt
+    mkdir -pv $libxcrypt_dir
+    libxcrypt_repo="https://github.com/besser82/libxcrypt/releases"
+    libxcrypt_latest=$(curl -s "${libxcrypt_repo}" | grep -Eo 'v([0-9]+([.][0-9]*)*)+' | sort -V | tail -1)
+    libxcrypt_ver=${libxcrypt_latest#v}
+    curl ${libxcrypt_repo}/download/${libxcrypt_latest}/libxcrypt-${libxcrypt_ver}.tar.xz --output ${libxcrypt_dir}/libxcrypt-${libxcrypt_ver}.tar.xz
+    libxcrypt_latest=libxcrypt-${libxcrypt_ver}
+    unset libxcrypt_ver
+    checksum=`sha512sum ${libxcrypt_dir}/${libxcrypt_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/libxcrypt.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $libxcrypt_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$libxcrypt_latest' might have malicious content inside.${default}"
+      libxcrypt_invalid_func() {
+        read -p "Proceed anyway? (y,N):" libxcrypt_invalid
+        if [[ -z "$libxcrypt_invalid" ]]; then
+          libxcrypt_invalid=n
+        fi
+        case $libxcrypt_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) Libxcrypt, a modern library for one-way hashing of passwords.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            libxcrypt_invalid_func
+        esac
+      }
+      libxcrypt_invalid_func
+    fi
+    cd $libxcrypt_dir
+    echo -e "${info}Extracting ${libxcrypt_latest}.tar.xz contents...${default}"
+    tar -xf ${libxcrypt_dir}/${libxcrypt_latest}.tar.xz
+    cd $OLDPWD
+    # Shadow, programs for handling passwords in a secure way
+    shadow_dir=${savelocation}/sources/shadow
+    mkdir -pv $shadow_dir
+    shadow_repo="https://github.com/shadow-maint/shadow/releases/"
+    shadow_latest=$(curl -s "${shadow_repo}" | grep -Eo '([0-9]+([.][0-9]*)*)+:' | sort -V | tail -1)
+    shadow_latest=${shadow_latest%':'}
+    curl ${shadow_repo}/download/${shadow_latest}/shadow-${shadow_latest}.tar.xz --output ${shadow_dir}/shadow-${shadow_latest}.tar.xz
+    shadow_latest=shadow-${shadow_latest}
+    checksum=`sha512sum ${shadow_dir}/${shadow_latest}.tar.xz | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/shadow.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $shadow_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$shadow_latest' might have malicious content inside.${default}"
+      shadow_invalid_func() {
+        read -p "Proceed anyway? (y,N):" shadow_invalid
+        if [[ -z "$shadow_invalid" ]]; then
+          shadow_invalid=n
+        fi
+        case $shadow_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) Shadow, programs for handling passwords in a secure way.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            shadow_invalid_func
+        esac
+      }
+      shadow_invalid_func
+    fi
+    cd $shadow_dir
+    echo -e "${info}Extracting ${shadow_latest}.tar.xz contents...${default}"
+    tar -xf ${shadow_dir}/${shadow_latest}.tar.xz
+    cd $OLDPWD
+    # Psmisc, miscellaneous utilities that use the proc filesystem
+    psmisc_dir=${savelocation}/sources/psmisc
+    mkdir -pv $psmisc_dir
+    # Linux From Scratch doesn't offer the latest version,
+    # but I'm still paying huge respect to Psmisc SourceForge repository maintainer(s) for comfortable file organization,
+    # as version checking will be very useful for updating LinuxHome repository.
+    psmisc_repo="https://sourceforge.net/projects/psmisc/files/psmisc/psmisc-23.6.tar.xz"
+    psmisc_latest=psmisc-23.6
+    curl --location ${psmisc_repo} --output ${pscmisc_dir}/${psmisc_latest}.tar.xz
+    checksum=`sha512sum ${psmisc_dir}/${psmisc_latest}.tar.xz | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/psmisc.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $psmisc_latest.tar.xz does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$psmisc_latest.tar.xz' might have malicious content inside.${default}"
+      psmisc_invalid_func() {
+        read -p "Proceed anyway? (y,N):" psmisc_invalid
+        if [[ -z "$psmisc_invalid" ]]; then
+          psmisc_invalid=n
+        fi
+        case $psmisc_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) Psmisc, miscellaneous utilities that use the proc filesystem.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            psmisc_invalid_func
+        esac
+      }
+      psmisc_invalid_func
+    fi
+    cd $psmisc_dir
+    echo -e "${info}Extracting ${psmisc_latest}.tar.xz contents...${default}"
+    tar -xf ${psmisc_dir}/${psmisc_latest}.tar.xz
+    cd $OLDPWD
+    # GNU Libtool generic library support script
+    libtool_dir=${savelocation}/sources/libtool
+    mkdir -pv $libtool_dir
+    libtool_repo="https://ftp.gnu.org/gnu/libtool/"
+    libtool_latest=$(curl -s "${libtool_repo}" | grep -Eo '(libtool-[0-9]+([.][0-9]*)*)+.tar.xz' | sort -V | tail -1)
+    curl ${libtool_repo}/$libtool_latest --output ${libtool_dir}/${libtool_latest}
+    checksum=`sha512sum ${libtool_dir}/${libtool_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/libtool.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $libtool_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$libtool_latest' might have malicious content inside.${default}"
+      libtool_invalid_func() {
+        read -p "Proceed anyway? (y,N):" libtool_invalid
+        if [[ -z "$libtool_invalid" ]]; then
+          libtool_invalid=n
+        fi
+        case $libtool_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) GNU Libtool generic library support script.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            libtool_invalid_func
+        esac
+      }
+      libtool_invalid_func
+    fi
+    cd $libtool_dir
+    echo -e "${info}Extracting $libtool_latest contents...${default}"
+    tar -xf ${libtool_dir}/${libtool_latest}
+    cd $OLDPWD
+    # GNU Database Manager
+    gdbm_dir=${savelocation}/sources/gdbm
+    mkdir -pv $gdbm_dir
+    gdbm_repo="https://ftp.gnu.org/gnu/gdbm/"
+    gdbm_latest=$(curl -s "${gdbm_repo}" | grep -Eo '(gdbm-[0-9]+([.][0-9]*)*)+.tar.gz' | sort -V | tail -1)
+    curl ${gdbm_repo}/$gdbm_latest --output ${gdbm_dir}/${gdbm_latest}
+    checksum=`sha512sum ${gdbm_dir}/${gdbm_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/gdbm.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $gdbm_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$gdbm_latest' might have malicious content inside.${default}"
+      gdbm_invalid_func() {
+        read -p "Proceed anyway? (y,N):" gdbm_invalid
+        if [[ -z "$gdbm_invalid" ]]; then
+          gdbm_invalid=n
+        fi
+        case $gdbm_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) GNU Database Manager.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            gdbm_invalid_func
+        esac
+      }
+      gdbm_invalid_func
+    fi
+    cd $gdbm_dir
+    echo -e "${info}Extracting $gdbm_latest contents...${default}"
+    tar -xf ${gdbm_dir}/${gdbm_latest}
+    cd $OLDPWD
+    # GNU gperf, a perfect hash function generator
+    gperf_dir=${savelocation}/sources/gperf
+    mkdir -pv $gperf_dir
+    gperf_repo="https://ftp.gnu.org/gnu/gperf/"
+    gperf_latest=$(curl -s "${gperf_repo}" | grep -Eo '(gperf-[0-9]+([.][0-9]*)*)+.tar.gz' | sort -V | tail -1)
+    curl ${gperf_repo}/$gperf_latest --output ${gperf_dir}/${gperf_latest}
+    checksum=`sha512sum ${gperf_dir}/${gperf_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/gperf.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $gperf_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$gperf_latest' might have malicious content inside.${default}"
+      gperf_invalid_func() {
+        read -p "Proceed anyway? (y,N):" gperf_invalid
+        if [[ -z "$gperf_invalid" ]]; then
+          gperf_invalid=n
+        fi
+        case $gperf_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) GNU gperf, a perfect hash function generator.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            gperf_invalid_func
+        esac
+      }
+      gperf_invalid_func
+    fi
+    cd $gperf_dir
+    echo -e "${info}Extracting $gperf_latest contents...${default}"
+    tar -xf ${gperf_dir}/${gperf_latest}
+    cd $OLDPWD
+    # Expat, a stream-oriented XML parser library
+    expat_dir=${savelocation}/sources/expat
+    mkdir -pv $expat_dir
+    # The version '2.6.0', which is included in the Book,
+    # is considered vulnerable by Expat maintainer(s),
+    # so we download '2.6.2'
+    expat_repo="https://prdownloads.sourceforge.net/expat/expat-2.6.2.tar.xz"
+    expat_latest=expat-2.6.2.tar.xz
+    curl --location $expat_repo --output ${expat_dir}/${expat_latest}
+    checksum=`sha512sum ${expat_dir}/${expat_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/expat.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $expat_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$expat_latest' might have malicious content inside.${default}"
+      expat_invalid_func() {
+        read -p "Proceed anyway? (y,N):" expat_invalid
+        if [[ -z "$expat_invalid" ]]; then
+          expat_invalid=n
+        fi
+        case $expat_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) Expat, a stream-oriented XML parser library.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            expat_invalid_func
+        esac
+      }
+      expat_invalid_func
+    fi
+    cd $expat_dir
+    echo -e "${info}Extracting $expat_latest contents...${default}"
+    tar -xf ${expat_dir}/${expat_latest}
+    cd $OLDPWD
+    # GNU Inetutils, a collection of common network programs
+    inetutils_dir=${savelocation}/sources/inetutils
+    mkdir -pv $inetutils_dir
+    inetutils_repo="https://ftp.gnu.org/gnu/inetutils/"
+    inetutils_latest=$(curl -s "${inetutils_repo}" | grep -Eo '(inetutils-[0-9]+([.][0-9]*)*)+.tar.xz' | sort -V | tail -1)
+    curl ${inetutils_repo}/$inetutils_latest --output ${inetutils_dir}/${inetutils_latest}
+    checksum=`sha512sum ${inetutils_dir}/${inetutils_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/inetutils.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $inetutils_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$inetutils_latest' might have malicious content inside.${default}"
+      inetutils_invalid_func() {
+        read -p "Proceed anyway? (y,N):" inetutils_invalid
+        if [[ -z "$inetutils_invalid" ]]; then
+          inetutils_invalid=n
+        fi
+        case $inetutils_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) GNU Inetutils, a collection of common network programs.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            inetutils_invalid_func
+        esac
+      }
+      inetutils_invalid_func
+    fi
+    cd $inetutils_dir
+    echo -e "${info}Extracting $inetutils_latest contents...${default}"
+    tar -xf ${inetutils_dir}/${inetutils_latest}
+    cd $OLDPWD
+    # GNU Less, a file pager
+    less_dir=${savelocation}/sources/less
+    mkdir -pv $less_dir
+    less_repo="https://ftp.gnu.org/gnu/less/"
+    less_latest=$(curl -s "${less_repo}" | grep -Eo 'less-[0-9]+.tar.gz' | sort -V | tail -1)
+    curl ${less_repo}/$less_latest --output ${less_dir}/${less_latest}
+    checksum=`sha512sum ${less_dir}/${less_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/less.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $less_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$less_latest' might have malicious content inside.${default}"
+      less_invalid_func() {
+        read -p "Proceed anyway? (y,N):" less_invalid
+        if [[ -z "$less_invalid" ]]; then
+          less_invalid=n
+        fi
+        case $less_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) GNU Less, a file pager.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            less_invalid_func
+        esac
+      }
+      less_invalid_func
+    fi
+    cd $less_dir
+    echo -e "${info}Extracting $less_latest contents...${default}"
+    tar -xf ${less_dir}/${less_latest}
+    cd $OLDPWD
+    # XML::Parser, a Perl module for parsing XML documents
+    xml_parser_dir=${savelocation}/sources/xml::parser
+    mkdir -pv $xml_parser_dir
+    xml_parser_repo="https://cpan.metacpan.org/authors/id/T/TO/TODDR/"
+    xml_parser_latest=$(curl -s "${xml_parser_repo}" | grep -Eo '(XML-Parser-[0-9]+([.][0-9]*)*)+.tar.gz' | sort -V | tail -1)
+    curl ${xml_parser_repo}/$xml_parser_latest --output ${xml_parser_dir}/${xml_parser_latest}
+    checksum=`sha512sum ${xml_parser_dir}/${xml_parser_latest} | awk '{print $1}'`
+    # Windows naming limitations
+    if [ "$checksum" != "`cat /etc/lfs-install/xml-parser.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $xml_parser_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$xml_parser_latest' might have malicious content inside.${default}"
+      xml_parser_invalid_func() {
+        read -p "Proceed anyway? (y,N):" xml_parser_invalid
+        if [[ -z "$xml_parser_invalid" ]]; then
+          xml_parser_invalid=n
+        fi
+        case $xml_parser_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) XML::Parser, a Perl module for parsing XML documents.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            xml_parser_invalid_func
+        esac
+      }
+      xml_parser_invalid_func
+    fi
+    cd $xml_parser_dir
+    echo -e "${info}Extracting $xml_parser_latest contents...${default}"
+    tar -xf ${xml_parser_dir}/${xml_parser_latest}
+    cd $OLDPWD
+    # Intltool, an internationalization tool for extracting translatable strings from source files
+    intltool_dir=${savelocation}/sources/intltool
+    mkdir -pv $intltool_dir
+    intltool_repo="https://launchpad.net/intltool/trunk/"
+    intltool_latest=$(curl -s "${intltool_repo}" | grep -Eo "Latest version is" | awk '{print $4}')
+    curl "${intltool_repo}/${intltool_latest}/+download/intltool-${intltool_latest}.tar.gz" --output ${intltool_dir}/intltool-${intltool_latest}.tar.gz
+    intltool_latest=intltool-${intltool_latest}.tar.gz
+    checksum=`sha512sum ${intltool_dir}/${intltool_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/intltool.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $intltool_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$intltool_latest' might have malicious content inside.${default}"
+      intltool_invalid_func() {
+        read -p "Proceed anyway? (y,N):" intltool_invalid
+        if [[ -z "$intltool_invalid" ]]; then
+          intltool_invalid=n
+        fi
+        case $intltool_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) Intltool,"
+            echo -e "an internationalization tool for extracting translatable strings from source files.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            intltool_invalid_func
+        esac
+      }
+      intltool_invalid_func
+    fi
+    cd $intltool_dir
+    echo -e "${info}Extracting $intltool_latest contents...${default}"
+    tar -xf ${intltool_dir}/${intltool_latest}
+    cd $OLDPWD
+    # GNU Autoconf, programs for producing "configure" shell scripts
+    autoconf_dir=${savelocation}/sources/autoconf
+    mkdir -pv $autoconf_dir
+    autoconf_repo="https://ftp.gnu.org/gnu/autoconf/"
+    autoconf_latest=$(curl -s "${autoconf_repo}" | grep -Eo '(autoconf-[0-9]+([.][0-9]*)*)+.tar.xz' | sort -V | tail -1)
+    curl ${autoconf_repo}/$autoconf_latest --output ${autoconf_dir}/${autoconf_latest}
+    checksum=`sha512sum ${autoconf_dir}/${autoconf_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/autoconf.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $autoconf_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$autoconf_latest' might have malicious content inside.${default}"
+      autoconf_invalid_func() {
+        read -p "Proceed anyway? (y,N):" autoconf_invalid
+        if [[ -z "$autoconf_invalid" ]]; then
+          autoconf_invalid=n
+        fi
+        case $autoconf_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) GNU Autoconf, programs for producing 'configure' shell scripts.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            autoconf_invalid_func
+        esac
+      }
+      autoconf_invalid_func
+    fi
+    cd $autoconf_dir
+    echo -e "${info}Extracting $autoconf_latest contents...${default}"
+    tar -xf ${autoconf_dir}/${autoconf_latest}
+    cd $OLDPWD
+    # GNU Automake, a tool for automatically generating "Makefile.in" files
+    automake_dir=${savelocation}/sources/automake
+    mkdir -pv $automake_dir
+    automake_repo="https://ftp.gnu.org/gnu/automake/"
+    automake_latest=$(curl -s "${automake_repo}" | grep -Eo '(automake-[0-9]+([.][0-9]*)*)+.tar.xz' | sort -V | tail -1)
+    curl ${automake_repo}/$automake_latest --output ${automake_dir}/${automake_latest}
+    checksum=`sha512sum ${automake_dir}/${automake_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/automake.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $automake_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$automake_latest' might have malicious content inside.${default}"
+      automake_invalid_func() {
+        read -p "Proceed anyway? (y,N):" automake_invalid
+        if [[ -z "$automake_invalid" ]]; then
+          automake_invalid=n
+        fi
+        case $automake_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) GNU Automake, a tool for automatically generating 'Makefile.in' files.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            automake_invalid_func
+        esac
+      }
+      automake_invalid_func
+    fi
+    cd $automake_dir
+    echo -e "${info}Extracting $automake_latest contents...${default}"
+    tar -xf ${automake_dir}/${automake_latest}
+    cd $OLDPWD
+    # OpenSSL, a toolkit for general-purpose cryptography and secure communication
+    openssl_dir=${savelocation}/sources/openssl
+    mkdir -pv $openssl_dir
+    openssl_repo="https://openssl.org/source/"
+    openssl_latest=$(curl -s "${openssl_repo}" | grep -Eo '(openssl-[0-9]+([.][0-9]*)*)+.tar.gz' | sort -V | tail -1)
+    curl ${openssl_repo}/$openssl_latest --output ${openssl_dir}/${openssl_latest}
+    checksum=`sha512sum ${openssl_dir}/${openssl_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/openssl.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $openssl_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$openssl_latest' might have malicious content inside.${default}"
+      openssl_invalid_func() {
+        read -p "Proceed anyway? (y,N):" openssl_invalid
+        if [[ -z "$openssl_invalid" ]]; then
+          openssl_invalid=n
+        fi
+        case $openssl_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) OpenSSL, a toolkit for general-purpose cryptography and secure communication.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            openssl_invalid_func
+        esac
+      }
+      openssl_invalid_func
+    fi
+    cd $openssl_dir
+    echo -e "${info}Extracting $openssl_latest contents...${default}"
+    tar -xf ${openssl_dir}/${openssl_latest}
+    cd $OLDPWD
+    # kmod, a Linux kernel module handler
+    kmod_dir=${savelocation}/sources/kmod
+    mkdir -pv $kmod_dir
+    kmod_repo="https://mirrors.edge.kernel.org/pub/linux/utils/kernel/kmod/"
+    kmod_latest=$(curl -s "${kmod_repo}" | grep -Eo 'kmod-[0-9]+.tar.xz' | sort -V | tail -1)
+    curl ${kmod_repo}/$kmod_latest --output ${kmod_dir}/${kmod_latest}
+    checksum=`sha512sum ${kmod_dir}/${kmod_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/kmod.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $kmod_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$kmod_latest' might have malicious content inside.${default}"
+      kmod_invalid_func() {
+        read -p "Proceed anyway? (y,N):" kmod_invalid
+        if [[ -z "$kmod_invalid" ]]; then
+          kmod_invalid=n
+        fi
+        case $kmod_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) kmod, a Linux kernel module handler.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            kmod_invalid_func
+        esac
+      }
+      kmod_invalid_func
+    fi
+    cd $kmod_dir
+    echo -e "${info}Extracting $kmod_latest contents...${default}"
+    tar -xf ${kmod_dir}/${kmod_latest}
+    cd $OLDPWD
+    # GNU Elfutils (only Libelf will be installed, Elfutils seems to be fully installed only in Beyond Linux From Scratch)
+    elfutils_dir=${savelocation}/sources/elfutils
+    mkdir -pv $elfutils_dir
+    # Fixed version
+    elfutils_repo="https://sourceware.org/ftp/elfutils/0.190/elfutils-0.190.tar.bz2"
+    elfutils_latest=elfutils-0.190.tar.bz2
+    curl ${elfutils_repo} --output ${elfutils_dir}/${elfutils_latest}
+    checksum=`sha512sum ${elfutils_dir}/${elfutils_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/elfutils.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $elfutils_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$elfutils_latest' might have malicious content inside.${default}"
+      elfutils_invalid_func() {
+        read -p "Proceed anyway? (y,N):" elfutils_invalid
+        if [[ -z "$elfutils_invalid" ]]; then
+          elfutils_invalid=n
+        fi
+        case $elfutils_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) ELF utilities.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            elfutils_invalid_func
+        esac
+      }
+      elfutils_invalid_func
+    fi
+    cd $elfutils_dir
+    echo -e "${info}Extracting $elfutils_latest contents...${default}"
+    tar -xf ${elfutils_dir}/${elfutils_latest}
+    cd $OLDPWD
+    # Foreign Function Interface Library
+    libffi_dir=${savelocation}/sources/libffi
+    mkdir -pv $libffi_dir
+    # And another fixed version
+    libffi_repo="https://github.com/libffi/libffi/releases/download/v3.4.4/libffi-3.4.4.tar.gz"
+    libffi_latest=libffi-3.4.4.tar.gz
+    curl ${libffi_repo} --output ${libffi_dir}/${libffi_latest}
+    checksum=`sha512sum ${libffi_dir}/${libffi_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/libffi.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $libffi_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$libffi_latest' might have malicious content inside.${default}"
+      libffi_invalid_func() {
+        read -p "Proceed anyway? (y,N):" libffi_invalid
+        if [[ -z "$libffi_invalid" ]]; then
+          libffi_invalid=n
+        fi
+        case $libffi_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) Foreign Function Interface Library.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            libffi_invalid_func
+        esac
+      }
+      libffi_invalid_func
+    fi
+    cd $libffi_dir
+    echo -e "${info}Extracting $libffi_latest contents...${default}"
+    tar -xf ${libffi_dir}/${libffi_latest}
+    cd $OLDPWD
+    # Flit-core, the distribution-building parts of Flit
+    flit_core_dir=${savelocation}/sources/flit-core
+    mkdir -pv $flit_core_dir
+    # No releases on GitHub, and 'https://pypi.org/project/flit-core/#history' doesn't provide an efficient way of version naming
+    flit_core_repo="https://pypi.org/packages/source/f/flit-core/flit_core-3.9.0.tar.gz"
+    flit_core_latest=flit_core-3.9.0.tar.gz
+    curl ${flit_core_repo} --output ${flit_core_dir}/${flit_core_latest}
+    checksum=`sha512sum ${flit_core_dir}/${flit_core_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/flit-core.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $flit_core_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$flit_core_latest' might have malicious content inside.${default}"
+      flit_core_invalid_func() {
+        read -p "Proceed anyway? (y,N):" flit_core_invalid
+        if [[ -z "$flit_core_invalid" ]]; then
+          flit_core_invalid=n
+        fi
+        case $flit_core_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) Flit-core, the distribution-building parts of Flit.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            flit_core_invalid_func
+        esac
+      }
+      flit_core_invalid_func
+    fi
+    cd $flit_core_dir
+    echo -e "${info}Extracting $flit_core_latest contents...${default}"
+    tar -xf ${flit_core_dir}/${flit_core_latest}
+    cd $OLDPWD
+    # Wheel, a built-package format for Python
+    wheel_dir=${savelocation}/sources/wheel
+    mkdir -pv $wheel_dir
+    # Fixed version
+    wheel_repo="https://pypi.org/packages/source/w/wheel/wheel-0.42.0.tar.gz"
+    wheel_latest=wheel-0.42.0.tar.gz
+    curl ${wheel_repo} --output ${wheel_dir}/${wheel_latest}
+    checksum=`sha512sum ${wheel_dir}/${wheel_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/wheel.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $wheel_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$wheel_latest' might have malicious content inside.${default}"
+      wheel_invalid_func() {
+        read -p "Proceed anyway? (y,N):" wheel_invalid
+        if [[ -z "$wheel_invalid" ]]; then
+          wheel_invalid=n
+        fi
+        case $wheel_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) Wheel, a built-package format for Python.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            wheel_invalid_func
+        esac
+      }
+      wheel_invalid_func
+    fi
+    cd $wheel_dir
+    echo -e "${info}Extracting $wheel_latest contents...${default}"
+    tar -xf ${wheel_dir}/${wheel_latest}
+    cd $OLDPWD
+    # Setuptools, a tool for Python package management
+    setuptools_dir=${savelocation}/sources/setuptools
+    mkdir -pv $setuptools_dir
+    # Another fixed version
+    setuptools_repo="https://pypi.org/packages/source/s/setuptools/setuptools-69.1.0.tar.gz"
+    setuptools_latest=setuptools-69.1.0.tar.gz
+    curl ${wheel_repo} --output ${setuptools_dir}/${setuptools_latest}
+    checksum=`sha512sum ${setuptools_dir}/${setuptools_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/setuptools.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $setuptools_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$setuptools_latest' might have malicious content inside.${default}"
+      setuptools_invalid_func() {
+        read -p "Proceed anyway? (y,N):" setuptools_invalid
+        if [[ -z "$setuptools_invalid" ]]; then
+          setuptools_invalid=n
+        fi
+        case $setuptools_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) Setuptools, a tool for Python package management.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            setuptools_invalid_func
+        esac
+      }
+      setuptools_invalid_func
+    fi
+    cd $setuptools_dir
+    echo -e "${info}Extracting $setuptools_latest contents...${default}"
+    tar -xf ${setuptools_dir}/${setuptools_latest}
+    cd $OLDPWD
+    # Ninja, a small build system with a focus on speed
+    ninja_dir=${savelocation}/sources/ninja
+    mkdir -pv $ninja_dir
+    ninja_repo="https://files.pythonhosted.org/packages/37/2c/d717d13a413d6f7579cdaa1e28e6e2c98de95461549b08d311c8a5bf4c51/ninja-1.11.1.1.tar.gz"
+    ninja_latest=ninja-1.11.1.tar.gz
+    curl ${ninja_repo} --output ${ninja_dir}/${ninja_latest}
+    checksum=`sha512sum ${ninja_dir}/${ninja_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/ninja.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $ninja_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$ninja_latest' might have malicious content inside.${default}"
+      ninja_invalid_func() {
+        read -p "Proceed anyway? (y,N):" ninja_invalid
+        if [[ -z "$ninja_invalid" ]]; then
+          ninja_invalid=n
+        fi
+        case $ninja_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) Ninja, a small build system with a focus on speed.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            ninja_invalid_func
+        esac
+      }
+      ninja_invalid_func
+    fi
+    cd $ninja_dir
+    echo -e "${info}Extracting $ninja_latest contents...${default}"
+    tar -xf ${ninja_dir}/${ninja_latest}
+    cd $OLDPWD
+    # Meson, a build system designed to be extremely fast and as user friendly as possible
+    meson_dir=${savelocation}/sources/meson
+    mkdir -pv $meson_dir
+    # Fixed version
+    meson_repo="https://github.com/mesonbuild/meson/releases/download/1.3.2/meson-1.3.2.tar.gz"
+    meson_latest=meson-1.3.2.tar.gz
+    curl ${meson_repo} --output ${meson_dir}/${meson_latest}
+    checksum=`sha512sum ${meson_dir}/${meson_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/meson.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $meson_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$meson_latest' might have malicious content inside.${default}"
+      meson_invalid_func() {
+        read -p "Proceed anyway? (y,N):" meson_invalid
+        if [[ -z "$meson_invalid" ]]; then
+          meson_invalid=n
+        fi
+        case $meson_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) Meson, a build system designed to be extremely fast and as user friendly as possible.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            meson_invalid_func
+        esac
+      }
+      meson_invalid_func
+    fi
+    cd $meson_dir
+    echo -e "${info}Extracting $meson_latest contents...${default}"
+    tar -xf ${meson_dir}/${meson_latest}
+    cd $OLDPWD
+    # Check, a unit testing framework for C programming language
+    check_dir=${savelocation}/sources/check
+    mkdir -pv $check_dir
+    # Fixed version
+    check_repo="https://github.com/libcheck/check/releases"
+    check_latest=$(curl -s "${check_repo}" | grep -Eo 'Check ([0-9]+([.][0-9]*)*)+' | sort -V | tail -1)
+    check_latest="${check_latest#Check }"
+    curl ${check_repo}/download/${check_latest}/check-${check_latest}.tar.gz --output ${check_dir}/check-${check_latest}.tar.gz
+    check_latest=check-${check_latest}.tar.gz
+    checksum=`sha512sum ${check_dir}/${check_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/check.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $check_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$check_latest' might have malicious content inside.${default}"
+      check_invalid_func() {
+        read -p "Proceed anyway? (y,N):" check_invalid
+        if [[ -z "$check_invalid" ]]; then
+          check_invalid=n
+        fi
+        case $check_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) Check, a unit testing framework for C programming language.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            check_invalid_func
+        esac
+      }
+      check_invalid_func
+    fi
+    cd $check_dir
+    echo -e "${info}Extracting $check_latest contents...${default}"
+    tar -xf ${check_dir}/${check_latest}
+    cd $OLDPWD
+    # GNU roff, programs for processing and formatting text and images
+    groff_dir=${savelocation}/sources/groff
+    mkdir -pv $groff_dir
+    groff_repo="https://ftp.gnu.org/gnu/groff/"
+    groff_latest=$(curl -s "${groff_repo}" | grep -Eo '(groff-[0-9]+([.][0-9]*)*)+.tar.gz' | sort -V | tail -1)
+    curl ${groff_repo}/$groff_latest --output ${groff_dir}/${groff_latest}
+    checksum=`sha512sum ${groff_dir}/${groff_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/groff.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $groff_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$groff_latest' might have malicious content inside.${default}"
+      groff_invalid_func() {
+        read -p "Proceed anyway? (y,N):" groff_invalid
+        if [[ -z "$groff_invalid" ]]; then
+          groff_invalid=n
+        fi
+        case $groff_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) GNU roff, programs for processing and formatting text and images.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            groff_invalid_func
+        esac
+      }
+      groff_invalid_func
+    fi
+    cd $groff_dir
+    echo -e "${info}Extracting $groff_latest contents...${default}"
+    tar -xf ${groff_dir}/${groff_latest}
+    cd $OLDPWD
+    # GNU GRand Unified Bootloader
+    grub_dir=${savelocation}/sources/grub
+    mkdir -pv $grub_dir
+    grub_repo="https://ftp.gnu.org/gnu/grub/"
+    grub_latest=$(curl -s "${grub_repo}" | grep -Eo '(grub-[0-9]+([.][0-9]*)*)+.tar.xz' | sort -V | tail -1)
+    curl ${grub_repo}/$grub_latest --output ${grub_dir}/${grub_latest}
+    checksum=`sha512sum ${grub_dir}/${grub_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/grub.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $grub_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$grub_latest' might have malicious content inside.${default}"
+      grub_invalid_func() {
+        read -p "Proceed anyway? (y,N):" grub_invalid
+        if [[ -z "$grub_invalid" ]]; then
+          grub_invalid=n
+        fi
+        case $grub_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) GNU GRand Unified Bootloader.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            grub_invalid_func
+        esac
+      }
+      grub_invalid_func
+    fi
+    cd $grub_dir
+    echo -e "${info}Extracting $grub_latest contents...${default}"
+    tar -xf ${grub_dir}/${grub_latest}
+    cd $OLDPWD
+    # IPRoute2, Linux programs for IPV4-based networking
+    iproute2_dir=${savelocation}/sources/iproute2
+    mkdir -pv $iproute2_dir
+    iproute2_repo="https://mirrors.edge.kernel.org/pub/linux/utils/net/iproute2/"
+    iproute2_latest=$(curl -s "${iproute2_repo}" | grep -Eo '(iproute2-[0-9]+([.][0-9]*)*)+.tar.xz' | sort -V | tail -1)
+    curl ${iproute2_repo}/$iproute2_latest --output ${iproute2_dir}/${iproute2_latest}
+    checksum=`sha512sum ${iproute2_dir}/${iproute2_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/iproute2.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $iproute2_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$iproute2_latest' might have malicious content inside.${default}"
+      iproute2_invalid_func() {
+        read -p "Proceed anyway? (y,N):" iproute2_invalid
+        if [[ -z "$iproute2_invalid" ]]; then
+          iproute2_invalid=n
+        fi
+        case $iproute2_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) IPRoute2, programs for IPV4-based networking.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            iproute2_invalid_func
+        esac
+      }
+      iproute2_invalid_func
+    fi
+    cd $iproute2_dir
+    echo -e "${info}Extracting $iproute2_latest contents...${default}"
+    tar -xf ${iproute2_dir}/${iproute2_latest}
+    cd $OLDPWD
+    # Kbd, Linux keyboard utilities
+    kbd_dir=${savelocation}/sources/kbd
+    mkdir -pv $kbd_dir
+    kbd_repo="https://mirrors.edge.kernel.org/pub/linux/utils/kbd/"
+    kbd_latest=$(curl -s "${kbd_repo}" | grep -Eo '(kbd-[0-9]+([.][0-9]*)*)+.tar.xz' | sort -V | tail -1)
+    curl ${kbd_repo}/$kbd_latest --output ${kbd_dir}/${kbd_latest}
+    checksum=`sha512sum ${kbd_dir}/${kbd_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/kbd.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $kbd_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$kbd_latest' might have malicious content inside.${default}"
+      kbd_invalid_func() {
+        read -p "Proceed anyway? (y,N):" kbd_invalid
+        if [[ -z "$kbd_invalid" ]]; then
+          kbd_invalid=n
+        fi
+        case $kbd_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) Kbd, Linux keyboard utilities.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            kbd_invalid_func
+        esac
+      }
+      kbd_invalid_func
+    fi
+    cd $kbd_dir
+    echo -e "${info}Extracting $kbd_latest contents...${default}"
+    tar -xf ${kbd_dir}/${kbd_latest}
+    cd $OLDPWD
+    # Pipeline manipulation library
+    libpipeline_dir=${savelocation}/sources/libpipeline
+    mkdir -pv $libpipeline_dir
+    libpipeline_repo="https://download.savannah.gnu.org/releases/libpipeline/"
+    libpipeline_latest=$(curl -s "${libpipeline_repo}" | grep -Eo '(libpipeline-[0-9]+([.][0-9]*)*)+.tar.gz' | sort -V | tail -1)
+    curl ${libpipeline_repo}/$libpipeline_latest --output ${libpipeline_dir}/${libpipeline_latest}
+    checksum=`sha512sum ${libpipeline_dir}/${libpipeline_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/libpipeline.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $libpipeline_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$libpipeline_latest' might have malicious content inside.${default}"
+      libpipeline_invalid_func() {
+        read -p "Proceed anyway? (y,N):" libpipeline_invalid
+        if [[ -z "$libpipeline_invalid" ]]; then
+          libpipeline_invalid=n
+        fi
+        case $libpipeline_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) Pipeline manipulation library (libpipeline).${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            libpipeline_invalid_func
+        esac
+      }
+      libpipeline_invalid_func
+    fi
+    cd $libpipeline_dir
+    echo -e "${info}Extracting $libpipeline_latest contents...${default}"
+    tar -xf ${libpipeline_dir}/${libpipeline_latest}
+    cd $OLDPWD
+    # GNU Vim, a powerful text editor
+    vim_dir=${savelocation}/sources/vim
+    mkdir -pv $vim_dir
+    # Fixed version (downgrade)
+    vim_repo="https://www.mirrorservice.org/pub/vim/unix/vim-9.0.tar.bz2"
+    vim_latest=vim-9.0.tar.bz2
+    curl ${vim_repo} --output ${vim_dir}/${vim_latest}
+    checksum=`sha512sum ${vim_dir}/${vim_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/vim.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $vim_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$vim_latest' might have malicious content inside.${default}"
+      vim_invalid_func() {
+        read -p "Proceed anyway? (y,N):" vim_invalid
+        if [[ -z "$vim_invalid" ]]; then
+          vim_invalid=n
+        fi
+        case $vim_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) Vim, a powerful text editor.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            vim_invalid_func
+        esac
+      }
+      vim_invalid_func
+    fi
+    cd $vim_dir
+    echo -e "${info}Extracting $vim_latest contents...${default}"
+    tar -xf ${vim_dir}/${vim_latest}
+    cd $OLDPWD
+    # MarkupSafe, an implementation of XML/HTML/XHTML Markup safe string
+    markupsafe_dir=${savelocation}/sources/MarkupSafe
+    mkdir -pv $markupsafe_dir
+    # Untrusted extension: 'whl', no time to test
+    markupsafe_repo="https://pypi.org/packages/source/M/MarkupSafe/MarkupSafe-2.1.5.tar.gz"
+    markupsafe_latest=MarkupSafe-2.1.5.tar.gz
+    curl ${markupsafe_repo} --output ${markupsafe_dir}/${markupsafe_latest}
+    checksum=`sha512sum ${markupsafe_dir}/${markupsafe_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/markupsafe.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $markupsafe_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$markupsafe_latest' might have malicious content inside.${default}"
+      markupsafe_invalid_func() {
+        read -p "Proceed anyway? (y,N):" markupsafe_invalid
+        if [[ -z "$markupsafe_invalid" ]]; then
+          markupsafe_invalid=n
+        fi
+        case $markupsafe_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) MarkupSafe, an implementation of XML/HTML/XHTML Markup safe string.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            markupsafe_invalid_func
+        esac
+      }
+      markupsafe_invalid_func
+    fi
+    cd $markupsafe_dir
+    echo -e "${info}Extracting $markupsafe_latest contents...${default}"
+    tar -xf ${markupsafe_dir}/${markupsafe_latest}
+    cd $OLDPWD
+    # Jinja2, a simple templating engine for Python
+    jinja2_dir=${savelocation}/sources/jinja2
+    mkdir -pv $jinja2_dir
+    # There's only a version (X.X.X) in the release names
+    jinja2_repo="https://pypi.org/packages/source/J/Jinja2/Jinja2-3.1.3.tar.gz"
+    jinja2_latest=Jinja2-3.1.3.tar.gz
+    curl ${jinja2_repo} --output ${jinja2_dir}/${jinja2_latest}
+    checksum=`sha512sum ${jinja2_dir}/${jinja2_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/jinja2.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $jinja2_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$jinja2_latest' might have malicious content inside.${default}"
+      jinja2_invalid_func() {
+        read -p "Proceed anyway? (y,N):" jinja2_invalid
+        if [[ -z "$jinja2_invalid" ]]; then
+          jinja2_invalid=n
+        fi
+        case $jinja2_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) Jinja2, a simple templating engine for Python.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            jinja2_invalid_func
+        esac
+      }
+      jinja2_invalid_func
+    fi
+    cd $jinja2_dir
+    echo -e "${info}Extracting $jinja2_latest contents...${default}"
+    tar -xf ${jinja2_dir}/${jinja2_latest}
+    cd $OLDPWD
+    # Systemd (only Udev will be installed)
+    systemd_dir=${savelocation}/sources/systemd
+    mkdir -pv $systemd_dir
+    systemd_repo="https://github.com/systemd/systemd/releases"
+    systemd_latest=$(curl -s "${systemd_repo}" | grep -Eo 'v[0-9]+' | sort -V | tail -1)
+    systemd_latest=${systemd_latest#v}
+    curl ${systemd_repo}/archive/refs/tags/v${systemd_latest}.tar.gz --output ${systemd_dir}/systemd-${systemd_latest}.tar.gz
+    systemd_latest=systemd-${systemd_latest}.tar.gz
+    checksum=`sha512sum ${systemd_dir}/${systemd_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/systemd.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $systemd_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$systemd_latest' might have malicious content inside.${default}"
+      systemd_invalid_func() {
+        read -p "Proceed anyway? (y,N):" systemd_invalid
+        if [[ -z "$systemd_invalid" ]]; then
+          systemd_invalid=n
+        fi
+        case $systemd_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) Systemd system and service manager.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            systemd_invalid_func
+        esac
+      }
+      systemd_invalid_func
+    fi
+    cd $systemd_dir
+    echo -e "${info}Extracting $systemd_latest contents...${default}"
+    tar -xf ${systemd_dir}/${systemd_latest}
+    cd $OLDPWD
+    # Man-DB, a 'man' implementation with Berkeley DB database
+    man_db_dir=${savelocation}/sources/man-db
+    mkdir -pv $man_db_dir
+    man_db_repo="https://download.savannah.gnu.org/releases/man-db/"
+    man_db_latest=$(curl -s "${man_db_repo}" | grep -Eo '(man-db-[0-9]+([.][0-9]*)*)+.tar.xz' | sort -V | tail -1)
+    curl ${man_db_repo}/$man_db_latest --output ${man_db_dir}/${man_db_latest}
+    checksum=`sha512sum ${man_db_dir}/${man_db_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/man-db.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $man_db_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$man_db_latest' might have malicious content inside.${default}"
+      man_db_invalid_func() {
+        read -p "Proceed anyway? (y,N):" man_db_invalid
+        if [[ -z "$man_db_invalid" ]]; then
+          man_db_invalid=n
+        fi
+        case $man_db_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) Man-DB, a 'man' implementation with Berkeley DB database.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            man_db_invalid_func
+        esac
+      }
+      man_db_invalid_func
+    fi
+    cd $man_db_dir
+    echo -e "${info}Extracting $man_db_latest contents...${default}"
+    tar -xf ${man_db_dir}/${man_db_latest}
+    cd $OLDPWD
+    # Procps-ng, command line utilities for browsing procfs filesystem
+    procps_ng_dir=${savelocation}/sources/procps-ng
+    mkdir -pv $procps_ng_dir
+    procps_ng_repo="https://sourceforge.net/projects/procps-ng/files/Production/"
+    procps_ng_latest=$(curl -s "${procps_ng_repo}" | grep -Eo '(procps-ng-[0-9]+([.][0-9]*)*)+.tar.xz' | sort -V | tail -1)
+    curl --location ${procps_ng_repo}/$procps_ng_latest/ --output ${procps_ng_dir}/${procps_ng_latest}
+    checksum=`sha512sum ${procps_ng_dir}/${procps_ng_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/procps-ng.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $procps_ng_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$procps_ng_latest' might have malicious content inside.${default}"
+      procps_ng_invalid_func() {
+        read -p "Proceed anyway? (y,N):" procps_ng_invalid
+        if [[ -z "$procps_ng_invalid" ]]; then
+          procps_ng_invalid=n
+        fi
+        case $procps_ng_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) Procps-ng, command line utilities for browsing procfs filesystem.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            procps_ng_invalid_func
+        esac
+      }
+      procps_ng_invalid_func
+    fi
+    cd $procps_ng_dir
+    echo -e "${info}Extracting $procps_ng_latest contents...${default}"
+    tar -xf ${procps_ng_dir}/${procps_ng_latest}
+    cd $OLDPWD
+    # E2fsprogs, utilities for Ext* filesystems
+    e2fsprogs_dir=${savelocation}/sources/e2fsprogs
+    mkdir -pv $e2fsprogs_dir
+    e2fsprogs_dir_repo="https://sourceforge.net/projects/e2fsprogs/files/e2fsprogs/"
+    e2fsprogs_latest=$(curl -s "${e2fsprogs_repo}" | grep -Eo '(v[0-9]+([.][0-9]*)*)+' | sort -V | tail -1)
+    e2fsprogs_latest=${e2fsprogs_latest#v}
+    curl --location ${e2fsprogs_repo}/v${e2fsprogs_latest}/e2fsprogs-${e2fsprogs_latest}.tar.gz --output ${e2fsprogs_dir}/e2fsprogs-${e2fsprogs_latest}.tar.gz
+    e2fsprogs_latest=e2fsprogs-${e2fsprogs_latest}.tar.gz
+    checksum=`sha512sum ${e2fsprogs_dir}/${e2fsprogs_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/e2fsprogs.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $e2fsprogs_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$e2fsprogs_latest' might have malicious content inside.${default}"
+      e2fsprogs_invalid_func() {
+        read -p "Proceed anyway? (y,N):" e2fsprogs_invalid
+        if [[ -z "$e2fsprogs_invalid" ]]; then
+          e2fsprogs_invalid=n
+        fi
+        case $e2fsprogs_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) E2fsprogs, utilities for Ext* filesystems.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            e2fsprogs_invalid_func
+        esac
+      }
+      e2fsprogs_invalid_func
+    fi
+    cd $e2fsprogs_dir
+    echo -e "${info}Extracting $e2fsprogs_latest contents...${default}"
+    tar -xf ${e2fsprogs_dir}/${e2fsprogs_latest}
+    cd $OLDPWD
+    # Sysklogd, programs for logging system messages
+    sysklogd_dir=${savelocation}/sources/sysklogd
+    mkdir -pv $sysklogd_dir
+    sysklogd_repo="https://www.infodrom.org/projects/sysklogd/download/"
+    sysklogd_latest=$(curl -s "${sysklogd_repo}" | grep -Eo '(sysklogd-[0-9]+([.][0-9]*)*)+.tar.gz' | sort -V | tail -1)
+    curl ${sysklogd_repo}/$sysklogd_latest/ --output ${sysklogd_dir}/${sysklogd_latest}
+    checksum=`sha512sum ${sysklogd_dir}/${sysklogd_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/sysklogd.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $sysklogd_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$sysklogd_latest' might have malicious content inside.${default}"
+      sysklogd_invalid_func() {
+        read -p "Proceed anyway? (y,N):" sysklogd_invalid
+        if [[ -z "$sysklogd_invalid" ]]; then
+          sysklogd_invalid=n
+        fi
+        case $sysklogd_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) Sysklogd, programs for logging system messages.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            sysklogd_invalid_func
+        esac
+      }
+      sysklogd_invalid_func
+    fi
+    cd $sysklogd_dir
+    echo -e "${info}Extracting $sysklogd_latest contents...${default}"
+    tar -xf ${sysklogd_dir}/${sysklogd_latest}
+    cd $OLDPWD
+    # SysVinit, a classic initialization program
+    sysvinit_dir=${savelocation}/sources/sysvinit
+    mkdir -pv $sysvinit_dir
+    # Now I've seen everything.
+    sysvinit_repo="https://github.com/slicer69/sysvinit/releases/download/3.08/sysvinit-3.08.tar.xz"
+    sysvinit_latest=sysvinit-3.08.tar.xz
+    curl ${sysvinit_repo} --output ${sysvinit_dir}/${sysvinit_latest}
+    checksum=`sha512sum ${sysvinit_dir}/${sysvinit_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/sysvinit.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $sysvinit_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$sysvinit_latest' might have malicious content inside.${default}"
+      sysvinit_invalid_func() {
+        read -p "Proceed anyway? (y,N):" sysvinit_invalid
+        if [[ -z "$sysvinit_invalid" ]]; then
+          sysvinit_invalid=n
+        fi
+        case $sysvinit_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) SysVinit, a classic initialization program.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            sysvinit_invalid_func
+        esac
+      }
+      sysvinit_invalid_func
+    fi
+    cd $sysvinit_dir
+    echo -e "${info}Extracting $sysvinit_latest contents...${default}"
+    tar -xf ${sysvinit_dir}/${sysvinit_latest}
+    cd $OLDPWD
+    # Save progress
+    echo "`sed '/save_download_final/d'  $fullsavename`" > $fullsavename
+    echo -e "save_download_final=1\n" >> $fullsavename
+    echo -e "${success}Done downloading final Linux From Scratch packages!${default}"
+  ;;
+  *)
+    save-error "save_download_final"
+esac
+
+# Perform lfs-install routines to continue installing in chroot
 if [[ -z "$save_chroot" ]]; then
   save_chroot=0
 fi

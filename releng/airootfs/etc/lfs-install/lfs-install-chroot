@@ -152,6 +152,23 @@ case $sudocheck in
   ;;
 esac
 
+# Additional safety checks
+if [[ -z "$save_chroot" ]]; then
+  save_chroot=0
+fi
+case $save_chroot in
+  1)
+    if [ "$(stat -c %d:%i /)" = "$(stat -c %d:%i /proc/1/root/.)" ]; then
+      error "You must run this script in a chroot environment.${default}"
+    fi
+  ;;
+  0)
+    error "You must not run this script before the \$save_chroot stage.${default}"
+  ;;
+  *)
+    save-error "save_chroot"
+esac
+
 # Chapter 7.5
 if [[ -z "$save_chroot_dirs" ]]; then
   save_chroot_dirs=0
@@ -194,9 +211,11 @@ case $save_chroot_files in
   0)
     ln -sv /proc/self/mounts /etc/mtab
     # Create /etc/hosts
+    echo -e "${info}Creating /etc/hosts...${default}"
     echo '127.0.0.1 localhost $(hostname)' >  /etc/hosts
     echo '::1       localhost'             >> /etc/hosts
     # Create /etc/passwd
+    echo -e "${info}Creating /etc/passwd...${default}"
     echo 'root:x:0:0:root:/root:/bin/bash'                                       >  /etc/passwd
     echo 'bin:x:1:1:bin:/dev/null:/usr/bin/false'                                >> /etc/passwd
     echo 'daemon:x:6:6:Daemon User:/dev/null:/usr/bin/false'                     >> /etc/passwd
@@ -204,6 +223,7 @@ case $save_chroot_files in
     echo 'uuidd:x:80:80:UUID Generation Daemon User:/dev/null:/usr/bin/false'    >> /etc/passwd
     echo 'nobody:x:65534:65534:Unprivileged User:/dev/null:/usr/bin/false'       >> /etc/passwd
     # Create /etc/group
+    echo -e "${info}Creating /etc/group...${default}"
     echo 'root:x:0:'        >  /etc/group
     echo 'bin:x:1:daemon'   >> /etc/group
     echo 'sys:x:2:'         >> /etc/group
@@ -229,13 +249,15 @@ case $save_chroot_files in
     echo 'users:x:999:'     >> /etc/group
     echo 'nogroup:x:65534:' >> /etc/group
     # Creating a regular user
+    echo -e "${info}Creating a regular temporary user...${default}"
     echo "TrustedInstaller:x:101:101::/home/TrustedInstaller:/bin/bash" >> /etc/passwd
     echo "TrustedInstaller:x:101:" >> /etc/group
     install -o TrustedInstaller -d /home/TrustedInstaller
     # Save progress
     echo "`sed '/save_chroot_files/d'  $fullsavename`" > $fullsavename
     echo -e "save_chroot_files=1\n" >> $fullsavename
-    echo -e "${info}Restarting the shell, please do not cancel this process...${default}"
+    echo -e "${success}Done!${default}"
+    echo -e "${info}Restarting the shell...${default}"
     # Here we go again
     chroot_options=""
     if [[ -z "$opt_debug" ]]; then
@@ -308,7 +330,7 @@ case $save_temp_gettext in
     # Save progress
     echo "`sed '/save_temp_gettext/d'  $fullsavename`" > $fullsavename
     echo -e "save_temp_gettext=1\n" >> $fullsavename
-    echo -e "${success}GNU gettext utilities successfully installed.${default}"
+    echo -e "${success}Temporary GNU gettext utilities successfully installed.${default}"
   ;;
   *)
     save-error "save_temp_gettext"
@@ -337,6 +359,10 @@ case $save_temp_bison in
         make -C ${bison_dir}/$bison_pkg -j$(nproc)
         make -C ${bison_dir}/$bison_pkg -j$(nproc) install
     esac
+    # Save progress
+    echo "`sed '/save_temp_bison/d'  $fullsavename`" > $fullsavename
+    echo -e "save_temp_bison=1\n" >> $fullsavename
+    echo -e "${success}Temporary GNU Bison successfully installed.${default}"
   ;;
   *)
     save-error "save_temp_bison"
@@ -374,6 +400,10 @@ case $save_temp_perl in
         make -C ${perl_dir}/$perl_pkg -j$(nproc)
         make -C ${perl_dir}/$perl_pkg -j$(nproc) install
     esac
+    # Save progress
+    echo "`sed '/save_temp_perl/d'  $fullsavename`" > $fullsavename
+    echo -e "save_temp_perl=1\n" >> $fullsavename
+    echo -e "${success}Temporary Perl programming language successfully installed.${default}"
   ;;
   *)
     save-error "save_temp_perl"
@@ -403,6 +433,10 @@ case $save_temp_python in
         make -C ${python_dir}/$python_pkg -j$(nproc)
         make -C ${python_dir}/$python_pkg -j$(nproc) install
     esac
+    # Save progress
+    echo "`sed '/save_temp_python/d'  $fullsavename`" > $fullsavename
+    echo -e "save_temp_python=1\n" >> $fullsavename
+    echo -e "${success}Temporary Python programming language successfully installed.${default}"
   ;;
   *)
     save-error "save_temp_python"
@@ -430,6 +464,10 @@ case $save_temp_texinfo in
         make -C ${texinfo_dir}/$texinfo_pkg -j$(nproc)
         make -C ${texinfo_dir}/$texinfo_pkg -j$(nproc) install
     esac
+    # Save progress
+    echo "`sed '/save_temp_texinfo/d'  $fullsavename`" > $fullsavename
+    echo -e "save_temp_texinfo=1\n" >> $fullsavename
+    echo -e "${success}Temporary GNU Texinfo documentation system successfully installed.${default}"
   ;;
   *)
     save-error "save_temp_texinfo"
@@ -469,6 +507,10 @@ case $save_temp_util_linux in
         make -C ${util_linux_dir}/$util_linux_pkg -j$(nproc)
         make -C ${util_linux_dir}/$util_linux_pkg -j$(nproc) install
     esac
+    # Save progress
+    echo "`sed '/save_temp_gettext/d'  $fullsavename`" > $fullsavename
+    echo -e "save_temp_gettext=1\n" >> $fullsavename
+    echo -e "${success}Temporary util-linux package successfully installed.${default}"
   ;;
   *)
     save-error "save_temp_util_linux"
@@ -483,11 +525,18 @@ case $save_chroot_cleanup in
   ;;
   0)
     echo -e "${info}Removing the currently installed documentation files...${default}"
+    # Do not delete 'lfs-install' in /usr/share/doc
+    mv -v  /usr/share/doc/lfs-install /usr/share/lfs-install
     rm -rf /usr/share/{info,man,doc}/*
+    mv -v  /usr/share/lfs-install     /usr/share/doc/lfs-install
     echo -e "${info}Removing libtool .la files...${default}"
     find /usr/{lib,libexec} -name \*.la -delete
     echo -e "${info}Removing the /tools directory...${default}"
     rm -rf /tools
+    # Save progress
+    echo "`sed '/save_chroot_cleanup/d'  $fullsavename`" > $fullsavename
+    echo -e "save_chroot_cleanup=1\n" >> $fullsavename
+    echo -e "${success}Done cleaning up the chroot system.${default}"
   ;;
   *)
     save-error "save_chroot_cleanup"
