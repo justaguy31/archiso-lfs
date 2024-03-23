@@ -13,7 +13,7 @@
 #
 # You should have received a copy of the GNU General Public License along with
 # this program.  If not, see <http://www.gnu.org/licenses/>.
-set -e
+set -eu
 # Color codes for texts
 success="\e[0;96m" # High intensity cyan
 warning="\e[0;93m" # High intensity yellow
@@ -24,7 +24,7 @@ default="\e[0m"    # White unless you modify the default shell color
 # Read the arguments for lfs-install
 args=$(getopt -a --options d:fhjks:l --long "debug:,full-save,help,one-job,keep-going,save-file:,license" -- "$@")
 if [ $? -ne 0 ]; then
-  echo "Use '-h' or '--help' for usage."
+  echo "Run 'lfs-install -h' or 'lfs-install --help' for usage."
   exit 1
 fi
 eval set -- "$args"
@@ -80,7 +80,7 @@ while true; do
 # -k --keep-going
   -k|--keep-going)
     opt_keep_going=1
-    set +e
+    set +eu
     shift 1;;
 
 # -s <var> --save-file <var>
@@ -119,8 +119,7 @@ error() {
 save-error() {
   echo -e "${error}Error: this save file is corrupted"
   echo -e "(\$$1 is equal to neither 1 or 0).${default}"
-  echo -e "${info}You might want to edit the save file using 'nano'"
-  echo -e "(the full location of the save file is $opt_save_file)."
+  echo -e "${info}You might want to edit the save file using 'nano $opt_save_file'."
   echo -e "Please note that "1" means the stage is done, and "0" means the stage is not done.${default}"
   exit 1
 }
@@ -414,7 +413,7 @@ save-argument() {
     echo "`sed '/save_created/d'    $fullsavename`" > $fullsavename
     echo "`sed '/savedevice/d'      $fullsavename`" > $fullsavename
     echo "`sed '/savelocation/d'    $fullsavename`" > $fullsavename
-    echo -e "savedevice=$parteddevice\nsavelocation=$savelocation\nsave_partitions=1\nsave_created=1\n" >> $fullsavename
+    echo -e "savedevice=$parteddevice\nsavelocation=`dirname "$savelocation"`\nsave_partitions=1\nsave_created=1\n" >> $fullsavename
   fi
 }
 save-argument
@@ -485,7 +484,7 @@ case $save_created in
     echo "`sed '/save_created/d'    $fullsavename`" > $fullsavename
     echo "`sed '/savedevice/d'      $fullsavename`" > $fullsavename
     echo "`sed '/savelocation/d'    $fullsavename`" > $fullsavename
-    echo -e "savedevice=$parteddevice\nsavelocation=$savelocation\nsave_partitions=1\nsave_created=1\n" >> $fullsavename # write certain variables to save file
+    echo -e "savedevice=$parteddevice\nsavelocation=`dirname "$savelocation"`\nsave_partitions=1\nsave_created=1\n" >> $fullsavename # write certain variables to save file
     echo -e "${success}Save file successfully created.${default}"
     echo -e "${info}You can run 'lfs-install -s ${fullsavename}' next time to continue where you stopped.${default}"
     read -p "Press enter to continue."
@@ -556,7 +555,7 @@ case $save_cross_binutils in
         fi
         case $binutils_invalid in
           [Yy])
-            echo -e "${warning}Building unsafe (or unstable) Binutils.${default}"
+            echo -e "${warning}Building unsafe (or unstable) GNU Binutils.${default}"
           ;;
           [Nn])
             exit 1
@@ -576,12 +575,12 @@ case $save_cross_binutils in
     cd $OLDPWD
     # Build & install
     pushd ${binutils_dir}/${binutils_pkg}
-      ./configure --prefix=${savelocation}/tools     \
-                  --with-sysroot=$savelocation       \
-                  --target=$(uname -m)-lfs-linux-gnu \
-                  --disable-nls                      \
-                  --enable-gprofng=no                \
-                  --disable-werror
+      ${binutils_dir}/${binutils_pkg}/configure --prefix=${savelocation}/tools     \
+                                                --with-sysroot=$savelocation       \
+                                                --target=$(uname -m)-lfs-linux-gnu \
+                                                --disable-nls                      \
+                                                --enable-gprofng=no                \
+                                                --disable-werror
     popd
     case $opt_one_job in
       1)
@@ -1062,9 +1061,9 @@ case $save_temporary_m4 in
     m4_pkg=$(basename "${m4_dir}/$m4_latest" .tar.xz)
     # Build & install
     pushd ${m4_dir}/${m4_pkg}
-      ./configure --prefix=/usr                                            \
-                  --host=$(uname -m)-lfs-linux-gnu                         \
-                  --build=$(${m4_dir}/${m4_pkg}/build-aux/config.guess)
+      ${m4_dir}/${m4_pkg}/configure --prefix=/usr                                            \
+                                    --host=$(uname -m)-lfs-linux-gnu                         \
+                                    --build=$(${m4_dir}/${m4_pkg}/build-aux/config.guess)
     popd
     case $opt_one_job in
       1)
@@ -1142,18 +1141,18 @@ case $save_temp_ncurses in
     esac
     popd
     pushd ${ncurses_dir}/${ncurses_pkg}
-      ./configure --prefix=/usr                                         \
-                  --host=$(uname -m)-lfs-linux-gnu                      \
-                  --build=$(${ncurses_dir}/${ncurses_pkg}/config.guess) \
-                  --mandir=/usr/share/man                               \
-                  --with-manpage-format=normal                          \
-                  --with-shared                                         \
-                  --without-normal                                      \
-                  --with-cxx-shared                                     \
-                  --without-debug                                       \
-                  --without-ada                                         \
-                  --disable-stripping                                   \
-                  --enable-widec
+      ${ncurses_dir}/${ncurses_pkg}/configure --prefix=/usr                                         \
+                                              --host=$(uname -m)-lfs-linux-gnu                      \
+                                              --build=$(${ncurses_dir}/${ncurses_pkg}/config.guess) \
+                                              --mandir=/usr/share/man                               \
+                                              --with-manpage-format=normal                          \
+                                              --with-shared                                         \
+                                              --without-normal                                      \
+                                              --with-cxx-shared                                     \
+                                              --without-debug                                       \
+                                              --without-ada                                         \
+                                              --disable-stripping                                   \
+                                              --enable-widec
     popd
     case $opt_one_job in
       1)
@@ -1181,7 +1180,7 @@ case $save_temp_ncurses in
     save-error "save_temp_ncurses"
 esac
 
-# Temporary Bash shell installation
+# Temporary GNU Bash shell installation
 if [[ -z "$save_temp_bash" ]]; then
   save_temp_bash=0
 fi
@@ -1206,7 +1205,7 @@ case $save_temp_bash in
         fi
         case $bash_invalid in
           [Yy])
-            echo -e "${warning}Building unstable (or unsafe) temporary Bash shell.${default}"
+            echo -e "${warning}Building unstable (or unsafe) temporary GNU Bash shell.${default}"
           ;;
           [Nn])
             exit 1
@@ -1224,10 +1223,10 @@ case $save_temp_bash in
     bash_pkg=$(basename "${bash_dir}/$bash_latest" .tar.gz)
     # Build & install
     pushd ${bash_dir}/${bash_pkg}
-      ./configure --prefix=/usr                                           \
-                  --build=$(${bash_dir}/${bash_pkg}/support/config.guess) \
-                  --host=$(uname -m)-lfs-linux-gnu                        \
-                  --without-bash-malloc
+      ${bash_dir}/${bash_pkg}/configure --prefix=/usr                                           \
+                                        --build=$(${bash_dir}/${bash_pkg}/support/config.guess) \
+                                        --host=$(uname -m)-lfs-linux-gnu                        \
+                                        --without-bash-malloc
     popd
     case $opt_one_job in
       1)
@@ -1243,13 +1242,13 @@ case $save_temp_bash in
     # Save progress
     echo "`sed '/save_temp_bash/d'  $fullsavename`" > $fullsavename
     echo -e "save_temp_bash=1\n" >> $fullsavename
-    echo -e "${success}Temporary Bash shell successfully installed.${default}"
+    echo -e "${success}Temporary GNU Bash shell successfully installed.${default}"
   ;;
   *)
     save-error "save_temp_bash"
 esac
 
-# Temporary Coreutils installation
+# Temporary GNU Coreutils installation
 if [[ -z "$save_temp_coreutils" ]]; then
   save_temp_coreutils=0
 fi
@@ -1292,11 +1291,11 @@ case $save_temp_coreutils in
     coreutils_pkg=$(basename "${coreutils_dir}/$coreutils_latest" .tar.xz)
     # Build & install
     pushd ${coreutils_dir}/${coreutils_pkg}
-      ./configure --prefix=/usr                                                       \
-                  --host=$(uname -m)-lfs-linux-gnu                                    \
-                  --build=$(${coreutils_dir}/${coreutils_pkg}/build-aux/config.guess) \
-                  --enable-install-program=hostname                                   \
-                  --enable-no-install-program=kill,uptime
+      ${coreutils_dir}/${coreutils_pkg}/configure --prefix=/usr                                                       \
+                                                  --host=$(uname -m)-lfs-linux-gnu                                    \
+                                                  --build=$(${coreutils_dir}/${coreutils_pkg}/build-aux/config.guess) \
+                                                  --enable-install-program=hostname                                   \
+                                                  --enable-no-install-program=kill,uptime
     popd
     case $opt_one_job in
       1)
@@ -1320,7 +1319,7 @@ case $save_temp_coreutils in
     save-error "save_temp_coreutils"
 esac
 
-# Temporary Diffutils installation
+# Temporary GNU Diffutils installation
 if [[ -z "$save_temp_diffutils" ]]; then
   save_temp_diffutils=0
 fi
@@ -1363,9 +1362,9 @@ case $save_temp_diffutils in
     diffutils_pkg=$(basename "${diffutils_dir}/$diffutils_latest" .tar.xz)
     # Build & install
     pushd ${diffutils_dir}/${diffutils_pkg}
-      ./configure --prefix=/usr                    \
-                  --host=$(uname -m)-lfs-linux-gnu \
-                  --build=$(${diffutils_dir}/${diffutils_pkg}/build-aux/config.guess)
+      ${diffutils_dir}/${diffutils_pkg}/configure --prefix=/usr                    \
+                                                  --host=$(uname -m)-lfs-linux-gnu \
+                                                  --build=$(${diffutils_dir}/${diffutils_pkg}/build-aux/config.guess)
     popd
     case $opt_one_job in
       1)
@@ -1430,10 +1429,10 @@ case $save_temp_file in
     mkdir -v ${file_dir}/${file_pkg}/temp_build || true
     # Chapter 6.7.1
     pushd ${file_dir}/${file_pkg}/temp_build
-      ../configure --disable-bzlib      \
-                   --disable-libseccomp \
-                   --disable-xzlib      \
-                   --disable-zlib
+      ${file_dir}/${file_pkg}/configure --disable-bzlib      \
+                                        --disable-libseccomp \
+                                        --disable-xzlib      \
+                                        --disable-zlib
       case $opt_one_job in
         1)
           make
@@ -1443,9 +1442,9 @@ case $save_temp_file in
       esac
     popd
     pushd ${file_dir}/${file_pkg}
-      ./configure --prefix=/usr                    \
-                  --host=$(uname -m)-lfs-linux-gnu \
-                  --build=$(${file_dir}/${file_pkg}/config.guess)
+      ${file_dir}/${file_pkg}/configure --prefix=/usr                    \
+                                        --host=$(uname -m)-lfs-linux-gnu \
+                                        --build=$(${file_dir}/${file_pkg}/config.guess)
     popd
     case $opt_one_job in
       1)
@@ -1513,10 +1512,10 @@ case $save_temp_findutils in
     findutils_pkg=$(basename "${findutils_dir}/$findutils_latest" .tar.xz)
     # Build & install
     pushd ${findutils_dir}/${findutils_pkg}
-      ./configure --prefix=/usr                                  \
-                  --localstatedir=/var/lib/locate                \
-                  --host=$(uname -m)-lfs-linux-gnu               \
-                  --build=$(${findutils_dir}/${findutils_pkg}/build-aux/config.guess)
+      ${findutils_dir}/${findutils_pkg}/configure --prefix=/usr                                  \
+                                                  --localstatedir=/var/lib/locate                \
+                                                  --host=$(uname -m)-lfs-linux-gnu               \
+                                                  --build=$(${findutils_dir}/${findutils_pkg}/build-aux/config.guess)
     popd
     case $opt_one_job in
       1)
@@ -1581,9 +1580,9 @@ case $save_temp_gawk in
     sed -i 's/extras//' ${gawk_dir}/${gawk_pkg}/Makefile.in
     # Build & install
     pushd ${gawk_dir}/${gawk_pkg}
-      ./configure --prefix=/usr                    \
-                  --host=$(uname -m)-lfs-linux-gnu \
-                  --build=$(${gawk_dir}/${gawk_pkg}/build-aux/config.guess)
+      ${gawk_dir}/${gawk_pkg}/configure --prefix=/usr                    \
+                                        --host=$(uname -m)-lfs-linux-gnu \
+                                        --build=$(${gawk_dir}/${gawk_pkg}/build-aux/config.guess)
     popd
     case $opt_one_job in
       1)
@@ -1646,9 +1645,9 @@ case $save_temp_grep in
     grep_pkg=$(basename "${grep_dir}/$grep_latest" .tar.xz)
     # Build & install
     pushd ${grep_dir}/${grep_pkg}
-      ./configure --prefix=/usr                    \
-                  --host=$(uname -m)-lfs-linux-gnu \
-                  --build=$(${grep_dir}/${grep_pkg}/build-aux/config.guess)
+      ${grep_dir}/${grep_pkg}/configure --prefix=/usr                    \
+                                        --host=$(uname -m)-lfs-linux-gnu \
+                                        --build=$(${grep_dir}/${grep_pkg}/build-aux/config.guess)
     popd
     case $opt_one_job in
       1)
@@ -1711,8 +1710,8 @@ case $save_temp_gzip in
     gzip_pkg=$(basename "${gzip_dir}/$gzip_latest" .tar.xz)
     # Build & install
     pushd ${gzip_dir}/${gzip_pkg}
-      ./configure --prefix=/usr \
-                  --host=$(uname -m)-lfs-linux-gnu
+      ${gzip_dir}/${gzip_pkg}/configure --prefix=/usr \
+                                        --host=$(uname -m)-lfs-linux-gnu
     popd
     case $opt_one_job in
       1)
@@ -1775,10 +1774,10 @@ case $save_temp_make in
     make_pkg=$(basename "${make_dir}/$make_latest" .tar.gz)
     # Build & install
     pushd ${make_dir}/${make_pkg}
-      ./configure --prefix=/usr                    \
-                  --without-guile                  \
-                  --host=$(uname -m)-lfs-linux-gnu \
-                  --build=$(${make_dir}/${make_pkg}/build-aux/config.guess)
+      ${make_dir}/${make_pkg}/configure --prefix=/usr                    \
+                                        --without-guile                  \
+                                        --host=$(uname -m)-lfs-linux-gnu \
+                                        --build=$(${make_dir}/${make_pkg}/build-aux/config.guess)
     popd
     case $opt_one_job in
       1)
@@ -1841,9 +1840,9 @@ case $save_temp_patch in
     patch_pkg=$(basename "${patch_dir}/$patch_latest" .tar.xz)
     # Build & install
     pushd ${patch_dir}/${patch_pkg}
-      ./configure --prefix=/usr                    \
-                  --host=$(uname -m)-lfs-linux-gnu \
-                  --build=$(${patch-dir}/${patch_pkg}/build-aux/config.guess)
+      ${patch_dir}/${patch_pkg}/configure --prefix=/usr                    \
+                                          --host=$(uname -m)-lfs-linux-gnu \
+                                          --build=$(${patch-dir}/${patch_pkg}/build-aux/config.guess)
     popd
     case $opt_one_job in
       1)
@@ -1906,9 +1905,9 @@ case $save_temp_sed in
     sed_pkg=$(basename "${sed_dir}/$sed_latest" .tar.xz)
     # Build & install
     pushd ${sed_dir}/${sed_pkg}
-      ./configure --prefix=/usr                    \
-                  --host=$(uname -m)-lfs-linux-gnu \
-                  --build=$(${sed_dir}/${sed_pkg}/build-aux/config.guess)
+      ${sed_dir}/${sed_pkg}/configure --prefix=/usr                    \
+                                      --host=$(uname -m)-lfs-linux-gnu \
+                                      --build=$(${sed_dir}/${sed_pkg}/build-aux/config.guess)
     popd
     case $opt_one_job in
       1)
@@ -1973,9 +1972,9 @@ case $save_temp_tar in
     pushd ${tar_dir}/${tar_pkg}
       # Remove restriction of the configure file to running as root
       FORCE_UNSAFE_CONFIGURE=1                     \
-      ./configure --prefix=/usr                    \
-                  --host=$(uname -m)-lfs-linux-gnu \
-                  --build=$(${tar_dir}/${tar_pkg}/build-aux/config.guess)
+      ${tar_dir}/${tar_pkg}/configure --prefix=/usr                    \
+                                      --host=$(uname -m)-lfs-linux-gnu \
+                                      --build=$(${tar_dir}/${tar_pkg}/build-aux/config.guess)
     popd
     case $opt_one_job in
       1)
@@ -2078,15 +2077,15 @@ case $save_temp_binutils in
     sed '6009s/$add_dir//' -i ${binutils_dir}/${binutils_pkg}/ltmain.sh
     # Build & install
     pushd ${binutils_dir}/${binutils_pkg}
-      ./configure --prefix=/usr                                           \
-                  --build=$(${binutils_dir}/${binutils_pkg}/config.guess) \
-                  --host=$(uname -m)-lfs-linux-gnu                        \
-                  --disable-nls                                           \
-                  --enable-shared                                         \
-                  --enable-gprofng=no                                     \
-                  --disable-werror                                        \
-                  --enable-64-bit-bfd                                     \
-                  --enable-default-hash-style=gnu
+      ${binutils_dir}/${binutils_pkg}/configure --prefix=/usr                                           \
+                                                --build=$(${binutils_dir}/${binutils_pkg}/config.guess) \
+                                                --host=$(uname -m)-lfs-linux-gnu                        \
+                                                --disable-nls                                           \
+                                                --enable-shared                                         \
+                                                --enable-gprofng=no                                     \
+                                                --disable-werror                                        \
+                                                --enable-64-bit-bfd                                     \
+                                                --enable-default-hash-style=gnu
     popd
     case $opt_one_job in
       1)
@@ -2264,23 +2263,23 @@ case $save_temp_gcc in
       -i ${gcc_dir}/${gcc_pkg}/libgcc/Makefile.in ${gcc_dir}/${gcc_pkg}/libstdc++-v3/include/Makefile.in
     # Build & install
     pushd ${gcc_dir}/${gcc_pkg}
-      ./configure --build=$(${gcc_dir}/${gcc_pkg}/config.guess)                               \
-                  --host=$(uname -m)-lfs-linux-gnu                                            \
-                  --target=$(uname -m)-lfs-linux-gnu                                          \
-                  LDFLAGS_FOR_TARGET=-L${gcc_dir}/${gcc_pkg}/$(uname -m)-lfs-linux-gnu/libgcc \
-                  --prefix=/usr                                                               \
-                  --with-build-sysroot=${savelocation}                                        \
-                  --enable-default-pie                                                        \
-                  --enable-default-ssp                                                        \
-                  --disable-nls                                                               \
-                  --disable-multilib                                                          \
-                  --disable-libatomic                                                         \
-                  --disable-libgomp                                                           \
-                  --disable-libquadmath                                                       \
-                  --disable-libsanitizer                                                      \
-                  --disable-libssp                                                            \
-                  --disable-libvtv                                                            \
-                  --enable-languages=c,c++
+      ${gcc_dir}/${gcc_pkg}/configure --build=$(${gcc_dir}/${gcc_pkg}/config.guess)                               \
+                                      --host=$(uname -m)-lfs-linux-gnu                                            \
+                                      --target=$(uname -m)-lfs-linux-gnu                                          \
+                                      LDFLAGS_FOR_TARGET=-L${gcc_dir}/${gcc_pkg}/$(uname -m)-lfs-linux-gnu/libgcc \
+                                      --prefix=/usr                                                               \
+                                      --with-build-sysroot=${savelocation}                                        \
+                                      --enable-default-pie                                                        \
+                                      --enable-default-ssp                                                        \
+                                      --disable-nls                                                               \
+                                      --disable-multilib                                                          \
+                                      --disable-libatomic                                                         \
+                                      --disable-libgomp                                                           \
+                                      --disable-libquadmath                                                       \
+                                      --disable-libsanitizer                                                      \
+                                      --disable-libssp                                                            \
+                                      --disable-libvtv                                                            \
+                                      --enable-languages=c,c++
     popd
     case $opt_one_job in
       1)
@@ -2644,6 +2643,41 @@ case $save_download_final in
     echo -e "${info}Extracting ${iana_etc_latest}.tar.gz contents...${default}"
     tar -xf ${iana_etc_dir}/${iana_etc_latest}.tar.gz
     cd $OLDPWD
+    # Time Zone Database
+    tzd_dir=${savelocation}/sources/tzd
+    mkdir -pv $tzd_dir
+    tzd_repo="https://data.iana.org/time-zones/releases/"
+    tzd_latest=$(curl -s "${tzd_repo}" | grep -Eo '(tzdata[0-9]+[a-z]*.tar.gz' | sort -V | tail -1)
+    # Remove an unexpected newline from the beginning
+    tzd_latest=${tzd_latest#\n}
+    curl ${tzd_repo}/$tzd_latest --output ${tzd_dir}/${tzd_latest}
+    checksum=`sha512sum ${tzd_dir}/${tzd_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/tzd.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $tzd_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$tzd_latest' might have malicious content inside.${default}"
+      tzd_invalid_func() {
+        read -p "Proceed anyway? (y,N):" tzd_invalid
+        if [[ -z "$tzd_invalid" ]]; then
+          tzd_invalid=n
+        fi
+        case $tzd_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) Time Zone Database.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            tzd_invalid_func
+        esac
+      }
+      tzd_invalid_func
+    fi
+    cd $tzd_dir
+    echo -e "${info}Extracting $tzd_latest contents...${default}"
+    tar -xf ${tzd_dir}/${tzd_latest}
+    cd $OLDPWD
     # Zlib, A Massively Spiffy Yet Delicately Unobtrusive Compression Library
     zlib_dir=${savelocation}/sources/zlib
     mkdir -pv $zlib_dir
@@ -2780,6 +2814,33 @@ case $save_download_final in
     echo -e "${info}Extracting $readline_latest contents...${default}"
     tar -xf ${readline_dir}/${readline_latest}
     cd $OLDPWD
+    readline_patch_dir=$(basename "$readline_latest" .tar.gz)
+    readline_patch_repo="https://www.linuxfromscratch.org/patches/lfs/12.1/readline-8.2-upstream_fixes-3.patch"
+    readline_patch_name=readline-8.2-upstream_fixes-3.patch
+    patch_checksum=`sha512sum ${readline_dir}/${readline_patch_dir}/${readline_patch_name} | awk '{print $1}'`
+    curl ${readline_patch_repo} --output ${readline_dir}/${readline_patch_dir}/$readline_patch_name
+    if [ "$checksum" != "`cat /etc/lfs-install/readline-patch.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $readline_patch_name does not match the trusted one."
+      echo    "This means the patch was updated recently, or the repository was attacked."
+      echo -e "$readline_patch_name might have malicious content inside.${default}"
+      readline_patch_invalid_func() {
+        read -p "Proceed anyway? (y,N):" readline_patch_invalid
+        if [[ -z "$readline_patch_invalid" ]]; then
+          readline_patch_invalid=n
+        fi
+        case $readline_patch_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) GNU Readline library.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            readline_patch_invalid_func
+        esac
+      }
+      readline_patch_invalid_func
+    fi
     # GNU bc arbitrary precision numeric processing language
     bc_dir=${savelocation}/sources/bc
     mkdir -pv $bc_dir
@@ -3191,6 +3252,36 @@ case $save_download_final in
     echo -e "${info}Extracting ${psmisc_latest}.tar.xz contents...${default}"
     tar -xf ${psmisc_dir}/${psmisc_latest}.tar.xz
     cd $OLDPWD
+
+    # GNU Bash shell LFS patch
+    bash_dir=/sources/bash
+    bash_pkg=$(basename "`ls $bash_dir | grep bash*/`" /)
+    bash_patch_repo=https://www.linuxfromscratch.org/patches/lfs/12.1/bash-5.2.21-upstream_fixes-1.patch
+    curl $bash_patch_repo --output ${bash_dir}/${bash_pkg}/bash-5.2.21-upstream_fixes-1.patch
+    checksum=`sha512sum ${bash_dir}/${bash_pkg}/bash-5.2.21-upstream_fixes-1.patch | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/bash-patch.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of bash-5.2.21-upstream-fixes-1.patch does not match the trusted one."
+      echo    "This means the patch was updated recently, or the repository was attacked."
+      echo -e "bash-5.2.21-upstream_fixes-1.patch might have malicious content inside.${default}"
+      bash_patch_invalid_func() {
+        read -p "Proceed anyway? (y,N):" bash_patch_invalid
+        if [[ -z "$bash_patch_invalid" ]]; then
+          bash_patch_invalid=n
+        fi
+        case $bash_patch_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) GNU Bash shell LFS patch.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            bash_patch_invalid_func
+        esac
+      }
+      bash_patch_invalid_func
+    fi
+
     # GNU Libtool generic library support script
     libtool_dir=${savelocation}/sources/libtool
     mkdir -pv $libtool_dir
@@ -3830,6 +3921,34 @@ case $save_download_final in
     echo -e "${info}Extracting $meson_latest contents...${default}"
     tar -xf ${meson_dir}/${meson_latest}
     cd $OLDPWD
+    # Coreutils internationalization fixes LFS patch
+    coreutils_dir=/sources/coreutils
+    coreutils_pkg=$(basename "`ls $coreutils_dir | grep coreutils*/`" /)
+    coreutils_patch_repo="https://www.linuxfromscratch.org/patches/lfs/12.1/coreutils-9.4-i18n-1.patch"
+    curl ${coreutils_patch_repo} --output ${coreutils_dir}/${coreutils_pkg}/coreutils-9.4-i18n-1.patch
+    checksum=`sha512sum ${coreutils_dir}/${coreutils_pkg}/coreutils-9.4-i18n-1.patch | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/coreutils-patch.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of coreutils-9.4-i18n-1.patch does not match the trusted one."
+      echo    "This means the patch was updated recently, or the repository was attacked."
+      echo -e "coreutils-9.4-i18n-1.patch might have malicious content inside.${default}"
+      coreutils_patch_invalid_func() {
+        read -p "Proceed anyway? (y,N):" coreutils_patch_invalid
+        if [[ -z "$coreutils_patch_invalid" ]]; then
+          coreutils_patch_invalid=n
+        fi
+        case $coreutils_patch_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) GNU Coreutils internationalization fixes LFS patch.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            coreutils_patch_invalid_func
+        esac
+      }
+      coreutils_patch_invalid_func
+    fi
     # Check, a unit testing framework for C programming language
     check_dir=${savelocation}/sources/check
     mkdir -pv $check_dir
@@ -3998,6 +4117,33 @@ case $save_download_final in
     echo -e "${info}Extracting $kbd_latest contents...${default}"
     tar -xf ${kbd_dir}/${kbd_latest}
     cd $OLDPWD
+    # Kbd Backspace/Delete Fix LFS patch
+    kbd_patch_repo="https://www.linuxfromscratch.org/patches/lfs/12.1/kbd-2.6.4-backspace-1.patch"
+    kbd_patch_dir=$(basename "`ls $kbd_dir | grep kbd*/`" /)
+    curl $kbd_patch_repo --output ${kbd_dir}/${kdb_patch_dir}/kbd-2.6.4-backspace-1.patch
+    checksum=`sha512sum ${kbd_dir}/${kbd_patch_dir}/kbd-2.6.4-backspace-1.patch | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/kbd-patch.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of kbd-2.6.4-backspace-1.patch does not match the trusted one."
+      echo    "This means the patch was updated recently, or the repository was attacked."
+      echo -e "kbd-2.6.4-backspace-1.patch might have malicious content inside.${default}"
+      kbd_patch_invalid_func() {
+        read -p "Proceed anyway? (y,N):" kbd_patch_invalid
+        if [[ -z "$kbd_patch_invalid" ]]; then
+          kbd_patch_invalid=n
+        fi
+        case $kbd_patch_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) Kbd Backspace/Delete Fix LFS patch.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            kbd_patch_invalid_func
+        esac
+      }
+      kbd_patch_invalid_func
+    fi
     # Pipeline manipulation library
     libpipeline_dir=${savelocation}/sources/libpipeline
     mkdir -pv $libpipeline_dir
@@ -4031,7 +4177,7 @@ case $save_download_final in
     echo -e "${info}Extracting $libpipeline_latest contents...${default}"
     tar -xf ${libpipeline_dir}/${libpipeline_latest}
     cd $OLDPWD
-    # GNU Vim, a powerful text editor
+    # Vim, a powerful text editor
     vim_dir=${savelocation}/sources/vim
     mkdir -pv $vim_dir
     # Fixed version (downgrade)
@@ -4139,7 +4285,7 @@ case $save_download_final in
     systemd_repo="https://github.com/systemd/systemd/releases"
     systemd_latest=$(curl -s "${systemd_repo}" | grep -Eo 'v[0-9]+' | sort -V | tail -1)
     systemd_latest=${systemd_latest#v}
-    curl ${systemd_repo}/archive/refs/tags/v${systemd_latest}.tar.gz --output ${systemd_dir}/systemd-${systemd_latest}.tar.gz
+    curl --location ${systemd_repo}/archive/refs/tags/v${systemd_latest}.tar.gz --output ${systemd_dir}/systemd-${systemd_latest}.tar.gz
     systemd_latest=systemd-${systemd_latest}.tar.gz
     checksum=`sha512sum ${systemd_dir}/${systemd_latest} | awk '{print $1}'`
     if [ "$checksum" != "`cat /etc/lfs-install/systemd.sha512`" ]; then
@@ -4167,6 +4313,37 @@ case $save_download_final in
     cd $systemd_dir
     echo -e "${info}Extracting $systemd_latest contents...${default}"
     tar -xf ${systemd_dir}/${systemd_latest}
+    cd $OLDPWD
+    # Udev-lfs, a set of Udev rules special for Linux From Scratch
+    udev_lfs_repo="https://anduin.linuxfromscratch.org/LFS/udev-lfs-20230818.tar.xz"
+    systemd_pkg=$(basename "`ls $systemd_dir | grep systemd*/`" /)
+    curl $udev_lfs_repo --output ${systemd_dir}/${systemd_pkg}/udev-lfs-20230818.tar.xz
+    checksum=`sha512sum ${systemd_dir}/${systemd_pkg}/udev-lfs-20230818.tar.xz | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/udev-lfs.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of udev-lfs-20230818.tar.xz does not match the trusted one."
+      echo    "This means the tarball was updated recently, or the repository was attacked."
+      echo -e "udev-lfs-20230818.tar.xz might have malicious content inside.${default}"
+      udev_lfs_invalid_func() {
+        read -p "Proceed anyway? (y,N):" udev_lfs_invalid
+        if [[ -z "$udev_lfs_invalid" ]]; then
+          udev_lfs_invalid=n
+        fi
+        case $udev_lfs_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) Udev-lfs, a set of Udev rules special for Linux From Scratch.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            udev_lfs_invalid_func
+        esac
+      }
+      udev_lfs_invalid_func
+    fi
+    cd ${systemd_dir}/${systemd_pkg}
+    echo -e "${info}Extracting udev-lfs-20230818.tar.xz contents...${default}"
+    tar -xf ${systemd_dir}/${systemd_pkg}/udev-lfs-20230818.tar.xz
     cd $OLDPWD
     # Man-DB, a 'man' implementation with Berkeley DB database
     man_db_dir=${savelocation}/sources/man-db
@@ -4336,6 +4513,33 @@ case $save_download_final in
     echo -e "${info}Extracting $sysvinit_latest contents...${default}"
     tar -xf ${sysvinit_dir}/${sysvinit_latest}
     cd $OLDPWD
+    # SysVinit Consolidated LFS patch
+    sysvinit_patch_repo="https://www.linuxfromscratch.org/patches/lfs/12.1/sysvinit-3.08-consolidated-1.patch"
+    sysvinit_pkg=$(basename "`ls $sysvinit_dir | grep sysvinit*/`" /)
+    curl $sysvinit_patch_repo --output ${sysvinit_dir}/${sysvinit_pkg}/sysvinit-3.08-consolidated-1.patch
+    checksum=`sha512sum ${sysvinit_dir}/${sysvinit_pkg}/sysvinit-3.08-consolidated-1.patch | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/sysvinit-patch.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of sysvinit-3.08-consolidated-1.patch does not match the trusted one."
+      echo    "This means the patch was updated recently, or the repository was attacked."
+      echo -e "sysvinit-3.08-consolidated-1.patch might have malicious content inside.${default}"
+      sysvinit_patch_invalid_func() {
+        read -p "Proceed anyway? (y,N):" sysvinit_patch_invalid
+        if [[ -z "$sysvinit_patch_invalid" ]]; then
+          sysvinit_patch_invalid=n
+        fi
+        case $sysvinit_patch_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) SysVinit Consolidated LFS patch.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            sysvinit_patch_invalid_func
+        esac
+      }
+      sysvinit_patch_invalid_func
+    fi
     # Save progress
     echo "`sed '/save_download_final/d'  $fullsavename`" > $fullsavename
     echo -e "save_download_final=1\n" >> $fullsavename
