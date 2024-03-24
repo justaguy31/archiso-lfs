@@ -39,12 +39,23 @@ while true; do
 # p - print which directories were invoked
 # n - print no debugging information
   -d|--debug)
-    opt_debug="$2"
+    case "$2" in
+      xv)
+        set -xv
+      ;;
+      vx)
+        set -vx
+      ;;
+      x)
+        set -x
+      ;;
+      v)
+        set -v
+      ;;
+      n)
+        set +vx
+    esac
     shift 2;;
-# -f --full-save
-  -f|--full-save)
-    opt_full_save="1"
-    shift 1;;
 
 # -h --help
   -h|--help)
@@ -55,17 +66,17 @@ while true; do
     echo ""
     echo "Options:"
     echo " -d, --debug <opt_debug>    filter debug messages by a desired level"
-    echo " -f, --full-save            store all save variables in a savefile"
     echo " -h, --help                 display this help and exit"
     echo " -j, --one-job              do not use 'make -j\$(nproc)' option while building, should be used for debugging"
     echo " -k, --keep-going           keep going if any error happens, very dangerous option"
     echo " -s, --save-file <filename> define a filename or path to save file, or start with a new save file"
     echo " -l, --license              show script license"
     echo ""
-    echo "The 'opt_debug' argument can be 'a' (all), 'b' (currently active stage, see save variables for names),"
-    echo "'j' (print which sub-commands are currently invoked),"
-    echo "'p' (print which directory is currently invoked),"
-    echo "'n' (print no debugging information)."
+    echo "The 'opt_debug' argument can be:"
+    echo "'vx' or 'xv' (a combination of the two below),"
+    echo "'x'          (print every command with command substitutions and variable expansions),"
+    echo "'v'          (print every command as they're executed),"
+    echo "'n'          (print no debugging information, default mode)."
     echo ""
     echo "The 'filename' argument can be a path to existing savefile, or a path to a new one."
     echo "lfs-install will prompt user for creating new file (recursively) if it doesn't exist"
@@ -124,7 +135,7 @@ save-error() {
 }
 
 # Load save file if it exists
-if [[ -f $opt_save_file && ! -z "$opt_save_file" ]]; then
+if [ -f $opt_save_file ] && [[ ! -z "$opt_save_file" ]]; then
   source $opt_save_file
   fullsavename=$opt_save_file
   swapon ${savedevice}1                      || true
@@ -3170,64 +3181,31 @@ case $save_final_grub in
   0)
     grub_dir=/sources/grub
     grub_pkg=$(basename "`ls $grub_dir | grep grub*/`" /)
-    if [ -d /sys/firmware/efi ]; then
-      echo -e "${warning}Warning: GNU GRand Unified Bootloader will not have EFI compatibility right now."
-      echo -e "You can, however, skip this package for now.${default}"
-      grub_efi_skip_func() {
-        read -p "Would you like to skip GNU GRUB BIOS installation? (Y/n)" grub_efi_skip
-        if [[ -z "$grub_efi_skip" ]]; then
-          grub_efi_skip=0
-        fi
-        case $grub_efi_skip in
-          [Yy])
-            # Save progress
-            echo "`sed '/save_final_grub/d'  $fullsavename`" > $fullsavename
-            echo -e "save_final_grub=1\n" >> $fullsavename
-            grub_installation=0
-            echo -e "${success}GNU GRand Unified Bootloader skipped for now.${default}"
-          ;;
-          [Nn])
-            grub_installation=1
-          ;;
-          *)
-            grub_efi_skip_func
-        esac
-      }
-      grub_efi_skip_func
-    fi
-    if [[ -z "$grub_installation" ]]; then
-      grub_installation=1
-    fi
-    case $grub_installation in
+    echo -e "${warning}Warning: this GNU GRand Unified Bootloader build will not have EFI support.${default}"
+    unset {C,CPP,CXX,LD}FLAGS
+    echo depends bli part_gpt > ${grub_dir}/${grub_pkg}/grub-core/extra_deps.lst
+    pushd ${grub_dir}/$grub_pkg
+      ${grub_dir}/$grub_pkg/configure --prefix=/usr     \
+                                      --sysconfdir=/etc \
+                                      --disable-efiemu  \
+                                      --disable-werror
+    popd
+    case $opt_one_job in
       1)
-        unset {C,CPP,CXX,LD}FLAGS
-        echo depends bli part_gpt > ${grub_dir}/${grub_pkg}/grub-core/extra_deps.lst
-        pushd ${grub_dir}/$grub_pkg
-          ${grub_dir}/$grub_pkg/configure --prefix=/usr     \
-                                          --sysconfdir=/etc \
-                                          --disable-efiemu  \
-                                          --disable-werror
-        popd
-        case $opt_one_job in
-          1)
-            make -C ${grub_dir}/$grub_pkg
-            make -C ${grub_dir}/$grub_pkg install
-          ;;
-          *)
-            make -C ${grub_dir}/$grub_pkg -j$(nproc)
-            make -C ${grub_dir}/$grub_pkg -j$(nproc) install
-        esac
-        mv -v /etc/bash_completion.d/grub /usr/share/bash-completion/completions
-        # Save progress
-        echo "`sed '/save_final_grub/d'  $fullsavename`" > $fullsavename
-        echo -e "save_final_grub=1\n" >> $fullsavename
-        echo -e "${success}GNU GRand Unified Bootloader successfully installed for BIOS support.${default}"
-      ;;
-      0)
+        make -C ${grub_dir}/$grub_pkg
+        make -C ${grub_dir}/$grub_pkg install
       ;;
       *)
-        error 'GNU GRand Unified Bootloader installation went wrong ($grub_installation is equal to neither 1 or 0).'
+        make -C ${grub_dir}/$grub_pkg -j$(nproc)
+        make -C ${grub_dir}/$grub_pkg -j$(nproc) install
     esac
+    mv -v /etc/bash_completion.d/grub /usr/share/bash-completion/completions
+    # Save progress
+    echo "`sed '/save_final_grub/d'  $fullsavename`" > $fullsavename
+    echo -e "save_final_grub=1\n" >> $fullsavename
+    echo -e "${success}GNU GRand Unified Bootloader successfully installed for BIOS support.${default}"
+    echo -e "${info}Removing ${grub_dir}/${grub_pkg}, please do not cancel this process...${default}"
+    rm -r ${grub_dir}/${grub_pkg} || true
   ;;
   *)
     save-error "save_final_grub"
@@ -4023,7 +4001,7 @@ case $save_final_sysvinit in
     save-error "save_final_sysvinit"
 esac
 
-# Final clean-up
+# Pre-final clean-up
 if [[ -z "$save_final_cleanup" ]]; then
   save_final_cleanup=0
 fi
@@ -4031,15 +4009,414 @@ case $save_final_cleanup in
   1)
   ;;
   0)
-    echo -e "${info}Cleaning up the /tmp directory...${default}"
-    rm -rf /tmp/*
     echo -e "${info}Removing .la files in /usr/lib and /usr/libexec...${default}"
-    find /usr/lib /usr/libexec -name \*.la -delete
+    find /usr/lib /usr/libexec -name \*.la -delete || true
     echo -e "${info}Removing GCC for cross-compilation...${default}"
-    find /usr -depth -name $(uname -m)-lfs-linux-gnu\* | xargs rm -rf
+    find /usr -depth -name $(uname -m)-lfs-linux-gnu\* | xargs rm -rf || true
     echo -e "${info}Removing temporary user...${default}"
-    userdel -r TrustedInstaller
+    userdel -r TrustedInstaller || true
+    # Save progress
+    echo "`sed '/save_final_cleanup/d'  $fullsavename`" > $fullsavename
+    echo -e "save_final_cleanup=1\n" >> $fullsavename
+    echo -e "${success}Done cleaning up the system!${default}"
   ;;
   *)
     save-error "save_final_cleanup"
+esac
+
+# LFS-Bootscripts
+if [[ -z "$save_final_lfs_bootscripts" ]]; then
+  save_final_lfs_bootscripts=0
+fi
+case $save_final_lfs_bootscripts in
+  1)
+  ;;
+  0)
+    lfs_bootscripts_dir=/sources/lfs-bootscripts
+    lfs_bootscripts_pkg=$(basename "`ls $lfs_bootscripts_dir | grep lfs-bootscripts*/`" /)
+    case $opt_one_job in
+      1)
+        make -C ${lfs_bootscripts_dir}/$lfs_bootscripts_pkg install
+      ;;
+      *)
+        make -C ${lfs_bootscripts_dir}/$lfs_bootscripts_pkg -j$(nproc) install
+    esac
+    # Save progress
+    echo "`sed '/save_final_lfs_bootscripts/d'  $fullsavename`" > $fullsavename
+    echo -e "save_final_lfs_bootscripts=1\n" >> $fullsavename
+    echo -e "${success}LFS-Bootscripts successfully installed.${default}"
+    echo -e "${info}Removing ${lfs_bootscripts_dir}/${lfs_bootscripts_pkg}, please do not cancel this process...${default}"
+    rm -r ${lfs_bootscripts_dir}/${lfs_bootscripts_pkg} || true
+  ;;
+  *)
+    save-error "save_final_lfs_bootscripts"
+esac
+
+# System configuration
+if [[ -z "$save_final_config" ]]; then
+  save_final_config=0
+fi
+case $save_final_config in
+  1)
+  ;;
+  0)
+    echo -e "${info}Creating /etc/hostname...${default}"
+    echo "lfs" > /etc/hostname
+    echo -e "${info}Creating /etc/inittab...${default}"
+    echo 'id:3:initdefault:'                                >  /etc/inittab
+    echo ''                                                 >> /etc/inittab
+    echo 'si::sysinit:/etc/rc.d/init.d/rc S'                >> /etc/inittab
+    echo ''                                                 >> /etc/inittab
+    echo 'l0:0:wait:/etc/rc.d/init.d/rc 0'                  >> /etc/inittab
+    echo 'l1:S1:wait:/etc/rc.d/init.d/rc 1'                 >> /etc/inittab
+    echo 'l2:2:wait:/etc/rc.d/init.d/rc 2'                  >> /etc/inittab
+    echo 'l3:3:wait:/etc/rc.d/init.d/rc 3'                  >> /etc/inittab
+    echo 'l4:4:wait:/etc/rc.d/init.d/rc 4'                  >> /etc/inittab
+    echo 'l5:5:wait:/etc/rc.d/init.d/rc 5'                  >> /etc/inittab
+    echo 'l6:6:wait:/etc/rc.d/init.d/rc 6'                  >> /etc/inittab
+    echo ''                                                 >> /etc/inittab
+    echo 'ca:12345:ctrlaltdel:/sbin/shutdown -t1 -a -r now' >> /etc/inittab
+    echo ''                                                 >> /etc/inittab
+    echo 'su:S06:once:/sbin/sulogin'                        >> /etc/inittab
+    echo 's1:1:respawn:/sbin/sulogin'                       >> /etc/inittab
+    echo ''                                                 >> /etc/inittab
+    echo '1:2345:respawn:/sbin/agetty --noclear tty1 9600'  >> /etc/inittab
+    echo '2:2345:respawn:/sbin/agetty tty2 9600'            >> /etc/inittab
+    echo '3:2345:respawn:/sbin/agetty tty3 9600'            >> /etc/inittab
+    echo '4:2345:respawn:/sbin/agetty tty4 9600'            >> /etc/inittab
+    echo '5:2345:respawn:/sbin/agetty tty5 9600'            >> /etc/inittab
+    echo '6:2345:respawn:/sbin/agetty tty6 9600'            >> /etc/inittab
+    echo -e "${info}Creating /etc/sysconfig/console...${default}"
+    echo 'LOGLEVEL="8"' > /etc/sysconfig/console
+    echo -e "${info}Creating /etc/sysconfig/rc.site...${default}"
+    cat > /etc/sysconfig/rc.site << "EOF"
+# rc.site
+# Optional parameters for boot scripts.
+
+# Distro Information
+# These values, if specified here, override the defaults
+DISTRO="Linux From Scratch" # The distro name
+DISTRO_CONTACT="lfs-dev@lists.linuxfromscratch.org" # Bug report address
+DISTRO_MINI="LFS" # Short name used in filenames for distro config
+
+# Define custom colors used in messages printed to the screen
+
+# Please consult `man console_codes` for more information
+# under the "ECMA-48 Set Graphics Rendition" section
+#
+# Warning: when switching from a 8bit to a 9bit font,
+# the linux console will reinterpret the bold (1;) to
+# the top 256 glyphs of the 9bit font.  This does
+# not affect framebuffer consoles
+
+# These values, if specified here, override the defaults
+BRACKET="\\033[1;34m" # Blue
+FAILURE="\\033[1;31m" # Red
+INFO="\\033[1;37m"    # White
+NORMAL="\\033[0;39m"  # Grey
+SUCCESS="\\033[1;36m" # Cyan
+WARNING="\\033[1;33m" # Yellow
+
+# Use a colored prefix
+# These values, if specified here, override the defaults
+#BMPREFIX="      "
+#SUCCESS_PREFIX="${SUCCESS}  *  ${NORMAL} "
+#FAILURE_PREFIX="${FAILURE}*****${NORMAL} "
+#WARNING_PREFIX="${WARNING} *** ${NORMAL} "
+
+# Manually set the right edge of message output (characters)
+# Useful when resetting console font during boot to override
+# automatic screen width detection
+#COLUMNS=120
+
+# Interactive startup
+IPROMPT="yes" # Whether to display the interactive boot prompt
+itime="5"    # The amount of time (in seconds) to display the prompt
+
+# The total length of the distro welcome string, without escape codes
+wlen=$(echo "Welcome to ${DISTRO}" | wc -c )
+welcome_message="Welcome to ${INFO}${DISTRO}${NORMAL}"
+
+# The total length of the interactive string, without escape codes
+ilen=$(echo "Press 'I' to enter interactive startup" | wc -c )
+i_message="Press '${INFO}I${NORMAL}' to enter interactive startup"
+
+# Set scripts to skip the file system check on reboot
+#FASTBOOT=yes
+
+# Skip reading from the console
+#HEADLESS=yes
+
+# Write out fsck progress if yes
+VERBOSE_FSCK=yes
+
+# Speed up boot without waiting for settle in udev
+#OMIT_UDEV_SETTLE=y
+
+# Speed up boot without waiting for settle in udev_retry
+#OMIT_UDEV_RETRY_SETTLE=yes
+
+# Skip cleaning /tmp if yes
+#SKIPTMPCLEAN=no
+
+# For setclock
+#UTC=1
+#CLOCKPARAMS=
+
+# For consolelog (Note that the default, 7=debug, is noisy)
+LOGLEVEL=8
+
+# For network
+#HOSTNAME=mylfs
+
+# Delay between TERM and KILL signals at shutdown
+#KILLDELAY=3
+
+# Optional sysklogd parameters
+#SYSKLOGD_PARMS="-m 0"
+
+# Console parameters
+#UNICODE=1
+#KEYMAP="de-latin1"
+#KEYMAP_CORRECTIONS="euro2"
+#FONT="lat0-16 -m 8859-15"
+#LEGACY_CHARSET=
+EOF
+    echo -e "${info}Creating /etc/inputrc...${default}"
+    cat > /etc/inputrc << "EOF"
+# Allow the command prompt to wrap to the next line
+set horizontal-scroll-mode Off
+
+# Enable 8-bit input
+set meta-flag On
+set input-meta On
+
+# Turns off 8th bit stripping
+set convert-meta Off
+
+# Keep the 8th bit for display
+set output-meta On
+
+# none, visible or audible
+set bell-style none
+
+# All of the following map the escape sequence of the value
+# contained in the 1st argument to the readline specific functions
+"\eOd": backward-word
+"\eOc": forward-word
+
+# for linux console
+"\e[1~": beginning-of-line
+"\e[4~": end-of-line
+"\e[5~": beginning-of-history
+"\e[6~": end-of-history
+"\e[3~": delete-char
+"\e[2~": quoted-insert
+
+# for xterm
+"\eOH": beginning-of-line
+"\eOF": end-of-line
+
+# for Konsole
+"\e[H": beginning-of-line
+"\e[F": end-of-line
+EOF
+    echo -e "${info}Creating /etc/shells...${default}"
+    echo '/bin/sh'   >  /etc/shells
+    echo '/bin/bash' >> /etc/shells
+    echo -e "${info}Creating /etc/fstab...${default}"
+    echo '# file system  mount-point    type     options             dump  fsck'        >  /etc/fstab
+    echo '#                                                                order'       >> /etc/fstab
+    echo ''                                                                             >> /etc/fstab
+    echo "/dev/${savedevice}3      /boot          fat32    defaults            1     2" >> /etc/fstab
+    echo "/dev/${savedevice}2      /              ext4     defaults            1     1" >> /etc/fstab
+    echo "/dev/${savedevice}1      swap           swap     pri=1               0     0" >> /etc/fstab
+    echo "proc           /proc          proc     nosuid,noexec,nodev 0     0"           >> /etc/fstab
+    echo "sysfs          /sys           sysfs    nosuid,noexec,nodev 0     0"           >> /etc/fstab
+    echo "devpts         /dev/pts       devpts   gid=5,mode=620      0     0"           >> /etc/fstab
+    echo "tmpfs          /run           tmpfs    defaults            0     0"           >> /etc/fstab
+    echo "devtmpfs       /dev           devtmpfs mode=0755,nosuid    0     0"           >> /etc/fstab
+    echo "tmpfs          /dev/shm       tmpfs    nosuid,nodev        0     0"           >> /etc/fstab
+    echo "cgroup2        /sys/fs/cgroup cgroup2  nosuid,noexec,nodev 0     0"           >> /etc/fstab
+    # Save progress
+    echo "`sed '/save_final_config/d'  $fullsavename`" > $fullsavename
+    echo -e "save_final_config=1\n" >> $fullsavename
+    echo -e "${success}System successfully configured.${default}"
+  ;;
+  *)
+    save-error "save_final_config"
+esac
+
+# Linux kernel
+if [[ -z "$save_final_linux" ]]; then
+  save_final_linux=0
+fi
+case $save_final_linux in
+  1)
+  ;;
+  0)
+    linux_dir=/sources/linux
+    linux_pkg=$(basename "`ls $linux_dir | grep linux*/`" /)
+    case $opt_one_job in
+      1)
+        make -C ${linux_dir}/$linux_pkg mrproper
+        make -C ${linux_dir}/$linux_pkg defconfig
+      ;;
+      *)
+        make -C ${linux_dir}/$linux_pkg -j$(nproc) mrproper
+        make -C ${linux_dir}/$linux_pkg -j$(nproc) defconfig
+    esac
+    # Edit features (and their dependencies) required by LFS
+    sed '/CONFIG_WERROR/                   c\CONFIG_WERROR=n'                -i ${linux_dir}/$linux_pkg/.config
+    sed '/CONFIG_PSI/                      c\CONFIG_PSI=y'                   -i ${linux_dir}/$linux_pkg/.config
+    sed '/CONFIG_KERNFS/                   c\CONFIG_KERNFS=y'                -i ${linux_dir}/$linux_pkg/.config
+    sed '/CONFIG_PSI_DEFAULT_DISABLED/     c\CONFIG_PSI_DEFAULT_DISABLED=n'  -i ${linux_dir}/$linux_pkg/.config
+    sed '/CONFIG_IKHEADERS/                c\CONFIG_IKHEADERS=n'             -i ${linux_dir}/$linux_pkg/.config
+    sed '/CONFIG_CGROUPS/                  c\CONFIG_CGROUPS=y'               -i ${linux_dir}/$linux_pkg/.config
+    sed '/CONFIG_MEMCG/                    c\CONFIG_MEMCG=y'                 -i ${linux_dir}/$linux_pkg/.config
+    sed '/CONFIG_PAGE_COUNTER/             c\CONFIG_PAGE_COUNTER=y'          -i ${linux_dir}/$linux_pkg/.config
+    sed '/CONFIG_EVENTFD/                  c\CONFIG_EVENTFD=y'               -i ${linux_dir}/$linux_pkg/.config
+    sed '/CONFIG_EXPERT/                   c\CONFIG_EXPERT=n'                -i ${linux_dir}/$linux_pkg/.config
+    sed '/CONFIG_RELOCATABLE/              c\CONFIG_RELOCATABLE=y'           -i ${linux_dir}/$linux_pkg/.config
+    sed '/CONFIG_RANDOMIZE_BASE/           c\CONFIG_RANDOMIZE_BASE=y'        -i ${linux_dir}/$linux_pkg/.config
+    sed '/CONFIG_STACKPROTECTOR/           c\CONFIG_STACKPROTECTOR=y'        -i ${linux_dir}/$linux_pkg/.config
+    sed '/CONFIG_STACKPROTECTOR_STRONG/    c\CONFIG_STACKPROTECTOR_STRONG=y' -i ${linux_dir}/$linux_pkg/.config
+    sed '/CONFIG_UEVENT_HELPER/            c\CONFIG_UEVENT_HELPER=n'         -i ${linux_dir}/$linux_pkg/.config
+    sed '/CONFIG_DEVTMPFS/                 c\CONFIG_DEVTMPFS=y'              -i ${linux_dir}/$linux_pkg/.config
+    sed '/CONFIG_DEVTMPFS_MOUNT/           c\CONFIG_DEVTMPFS_MOUNT=y'        -i ${linux_dir}/$linux_pkg/.config
+    echo -e "${warning}Warning: Direct Rendering Manager will not be built.${default}"
+    case $(uname -m) in
+      x86_64)
+        sed '/CONFIG_X86_X2APIC/           c\CONFIG_X86_X2APIC=y'            -i ${linux_dir}/$linux_pkg/.config
+        sed '/CONFIG_PCI/                  c\CONFIG_PCI=y'                   -i ${linux_dir}/$linux_pkg/.config
+        sed '/CONFIG_PCI_MSI/              c\CONFIG_PCI_MSI=y'               -i ${linux_dir}/$linux_pkg/.config
+        sed '/CONFIG_GENERIC_MSI_IRQ/      c\CONFIG_GENERIC_MSI_IRQ=y'       -i ${linux_dir}/$linux_pkg/.config
+        sed '/CONFIG_IRQ_DOMAIN_HIERARCHY/ c\CONFIG_IRQ_DOMAIN_HIERARCHY=y'  -i ${linux_dir}/$linux_pkg/.config
+        sed '/CONFIG_IRQ_DOMAIN/           c\CONFIG_IRQ_DOMAIN=y'            -i ${linux_dir}/$linux_pkg/.config
+        sed '/CONFIG_IOMMU_SUPPORT/        c\CONFIG_IOMMU_SUPPORT=y'         -i ${linux_dir}/$linux_pkg/.config
+        sed '/CONFIG_IRQ_REMAP/            c\CONFIG_IRQ_REMAP=y'             -i ${linux_dir}/$linux_pkg/.config
+        sed '/CONFIG_DMAR_TABLE/           c\CONFIG_DMAR_TABLE=y'            -i ${linux_dir}/$linux_pkg/.config
+      ;;
+      x86)
+        sed '/CONFIG_HIGHMEM64G/           c\CONFIG_HIGHMEM64G=y'            -i ${linux_dir}/$linux_pkg/.config
+        sed '/CONFIG_X86_PAE/              c\CONFIG_X86_PAE=y'               -i ${linux_dir}/$linux_pkg/.config
+        sed '/CONFIG_PHYS_ADDR_T_64BIT/    c\CONFIG_PHYS_ADDR_T_64BIT=y'     -i ${linux_dir}/$linux_pkg/.config
+        sed '/CONFIG_SWIOTLB/              c\CONFIG_SWIOTLB=y'               -i ${linux_dir}/$linux_pkg/.config
+        sed '/CONFIG_NEED_DMA_MAP_STATE/   c\CONFIG_NEED_DMA_MAP_STATE=y'    -i ${linux_dir}/$linux_pkg/.config
+    esac
+    sed '/CONFIG_BLK_DEV_NVME/             c\CONFIG_BLK_DEV_NVME=y'          -i ${linux_dir}/$linux_pkg/.config
+    case $opt_one_job in
+      1)
+        make -C ${linux_dir}/$linux_pkg
+        make -C ${linux_dir}/$linux_pkg modules_install
+      ;;
+      *)
+        make -C ${linux_dir}/$linux_pkg -j$(nproc)
+        make -C ${linux_dir}/$linux_pkg -j$(nproc) modules_install
+    esac
+    mount /boot
+    cp -iv ${linux_dir}/${linux_pkg}/arch/x86/boot/bzImage /boot/vmlinuz-${linux_pkg#linux-}-lfs-12.1
+    cp -iv ${linux_dir}/${linux_pkg}/System.map            /boot/System.map-${linux_pkg#linux-}
+    cp -iv ${linux_dir}/${linux_pkg}/.config               /boot/config-${linux_pkg#linux-}
+    cp -rv ${linux_dir}/${linux_pkg}/Documentation -T      /usr/share/doc/$linux_pkg
+    install -v -m755 -d /etc/modprobe.d
+    echo -e "${info}Creating /etc/modprobe.d/usb.conf...${default}"
+    echo 'install ohci_hcd /sbin/modprobe ehci_hcd ; /sbin/modprobe -i ohci_hcd ; true' >  /etc/modprobe.d/usb.conf
+    echo 'install uhci_hcd /sbin/modprobe ehci_hcd ; /sbin/modprobe -i uhci_hcd ; true' >> /etc/modprobe.d/usb.conf
+    # Save progress
+    echo "`sed '/save_final_linux/d'  $fullsavename`" > $fullsavename
+    echo -e "save_final_linux=1\n" >> $fullsavename
+    echo -e "${success}Linux kernel successfully installed.${default}"
+  ;;
+  *)
+    save-error "save_final_linux"
+esac
+
+# Making the system bootable
+if [[ -z "$save_final_boot" ]]; then
+  save_final_boot=0
+fi
+case $save_final_boot in
+  1)
+  ;;
+  0)
+    # For identifying Linux version
+    linux_dir=/sources/linux
+    linux_pkg=$(basename "`ls $linux_dir | grep linux*/`" /)
+    grub-install ${savedevice}3
+    echo -e "${info}Creating /boot/grub/grub.cfg...${default}"
+    echo 'set default=0'                                                                >  /boot/grub/grub.cfg
+    echo 'set timeout=5'                                                                >> /boot/grub/grub.cfg
+    echo ''                                                                             >> /boot/grub/grub.cfg
+    echo 'insmod part_gpt'                                                              >> /boot/grub/grub.cfg
+    echo 'insmod ext2'                                                                  >> /boot/grub/grub.cfg
+    echo 'set root=(hd0,3)'                                                             >> /boot/grub/grub.cfg
+    echo ''                                                                             >> /boot/grub/grub.cfg
+    echo "menuentry \"GNU/Linux, Linux ${linux_pkg#linux-}-lfs-12.1\" {"                >> /boot/grub/grub.cfg
+    echo "        linux   /vmlinuz-${linux_pkg#linux-}-lfs-12.1 root=${savedevice}2 ro" >> /boot/grub/grub.cfg
+    echo '}'                                                                            >> /boot/grub/grub.cfg
+    # Save progress
+    echo "`sed '/save_final_boot/d'  $fullsavename`" > $fullsavename
+    echo -e "save_final_boot=1\n" >> $fullsavename
+    echo -e "${success}Done making the system bootable.${default}"
+  ;;
+  *)
+    save-error "save_final_boot"
+esac
+
+if [[ -z "$save_final_finish" ]]; then
+  save_final_finish=0
+fi
+case $save_final_finish in
+  1)
+    echo -e "${info}You would like to log out of the chroot environment, power off,"
+    echo -e "remove the installation image, and boot the Linux From Scratch system now.${default}"
+    echo    "Issue the following to power off the installation image:"
+    echo    "logout"
+    echo -e "systemctl poweroff${default}"
+    exit 0
+  ;;
+  0)
+    echo -e "${info}Creating /etc/lfs-release...${default}"
+    echo '12.1' > /etc/lfs-release
+    echo -e "${info}Creating /etc/lsb-release...${default}"
+    echo 'DISTRIB_ID="Linux From Scratch"'                                          >  /etc/lsb-release
+    echo 'DISTRIB_RELEASE="12.1"'                                                   >> /etc/lsb-release
+    echo 'DISTRIB_CODENAME="linuxhome-development"'                                 >> /etc/lsb-release
+    echo 'DISTRIB_DESCRIPTION="Linux From Scratch for LinuxHome early development"' >> /etc/lsb-release
+    echo -e "${info}Creating /etc/os-release...${default}"
+    echo 'NAME="Linux From Scratch"'                        >  /etc/os-release
+    echo 'VERSION="12.1"'                                   >> /etc/os-release
+    echo 'ID=lfs'                                           >> /etc/os-release
+    echo 'PRETTY_NAME="Linux From Scratch 12.1"'            >> /etc/os-release
+    echo 'VERSION_CODENAME="linuxhome-development"'         >> /etc/os-release
+    echo 'HOME_URL="https://www.linuxfromscratch.org/lfs/"' >> /etc/os-release
+    echo -e "${success}Congratulations! The system has finally been installed!${default}"
+    rm_source_dir_func() {
+      read -p "Would you like to remove the /sources directory (Y/n)?" rm_source_dir
+      if [[ -z "$rm_source_dir" ]]; then
+        rm_source_dir=y
+      case $rm_source_dir in
+        [Yy])
+          rm -rv /sources || true
+        ;;
+        [Nn])
+        ;;
+        *)
+          rm_source_dir_func
+      esac
+    }
+    rm_source_dir_func
+    # Save progress
+    echo "`sed '/save_final_finish/d'  $fullsavename`" > $fullsavename
+    echo -e "save_final_finish=1\n" >> $fullsavename
+    echo -e "${info}You would like to log out of the chroot environment, power off,"
+    echo -e "remove the installation image, and boot the Linux From Scratch system now.${default}"
+    echo    "Issue the following to power off the installation image:"
+    echo    "logout"
+    echo -e "systemctl poweroff${default}"
+    exit 0
+  ;;
+  *)
+    save-error "save_final_finish"
 esac

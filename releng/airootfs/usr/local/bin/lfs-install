@@ -22,7 +22,7 @@ info="\e[0;97m"    # High intensity white
 default="\e[0m"    # White unless you modify the default shell color
 
 # Read the arguments for lfs-install
-args=$(getopt -a --options d:fhjks:l --long "debug:,full-save,help,one-job,keep-going,save-file:,license" -- "$@")
+args=$(getopt -a --options d:hjks:l --long "debug:,help,one-job,keep-going,save-file:,license" -- "$@")
 if [ $? -ne 0 ]; then
   echo "Run 'lfs-install -h' or 'lfs-install --help' for usage."
   exit 1
@@ -39,12 +39,23 @@ while true; do
 # p - print which directories were invoked
 # n - print no debugging information
   -d|--debug)
-    opt_debug="$2"
+    case "$2" in
+      xv)
+        set -xv
+      ;;
+      vx)
+        set -vx
+      ;;
+      x)
+        set -x
+      ;;
+      v)
+        set -v
+      ;;
+      n)
+        set +vx
+    esac
     shift 2;;
-# -f --full-save
-  -f|--full-save)
-    opt_full_save="1"
-    shift 1;;
 
 # -h --help
   -h|--help)
@@ -55,17 +66,17 @@ while true; do
     echo ""
     echo "Options:"
     echo " -d, --debug <opt_debug>    filter debug messages by a desired level"
-    echo " -f, --full-save            store all save variables in a savefile"
     echo " -h, --help                 display this help and exit"
     echo " -j, --one-job              do not use 'make -j\$(nproc)' option while building, should be used for debugging"
     echo " -k, --keep-going           keep going if any error happens, very dangerous option"
     echo " -s, --save-file <filename> define a filename or path to save file, or start with a new save file"
     echo " -l, --license              show script license"
     echo ""
-    echo "The 'opt_debug' argument can be 'a' (all), 'b' (currently active stage, see save variables for names),"
-    echo "'j' (print which sub-commands are currently invoked),"
-    echo "'p' (print which directory is currently invoked),"
-    echo "'n' (print no debugging information)."
+    echo "The 'opt_debug' argument can be:"
+    echo "'vx' or 'xv' (a combination of the two below),"
+    echo "'x'          (print every command with command substitutions and variable expansions),"
+    echo "'v'          (print every command as they're executed),"
+    echo "'n'          (print no debugging information, default mode)."
     echo ""
     echo "The 'filename' argument can be a path to existing savefile, or a path to a new one."
     echo "lfs-install will prompt user for creating new file (recursively) if it doesn't exist"
@@ -125,7 +136,7 @@ save-error() {
 }
 
 # Load save file if it exists
-if [[ -f $opt_save_file && ! -z "$opt_save_file" ]]; then
+if [ -f $opt_save_file ] && [[ ! -z "$opt_save_file" ]]; then
   source $opt_save_file
   fullsavename=$opt_save_file
   swapon ${savedevice}1                      || true
@@ -4540,6 +4551,39 @@ case $save_download_final in
       }
       sysvinit_patch_invalid_func
     fi
+    # LFS-Bootscripts
+    lfs_bootscripts_dir=${savelocation}/sources/lfs-bootscripts
+    mkdir -pv lfs_bootscripts_dir
+    lfs_bootscripts_repo="https://www.linuxfromscratch.org/lfs/downloads/12.1/lfs-bootscripts-20230728.tar.xz"
+    lfs_bootscripts_latest=lfs-bootscripts-20230728.tar.xz
+    curl ${lfs_bootscripts_repo} --output ${lfs_bootscripts_dir}/${lfs_bootscripts_latest}
+    checksum=`sha512sum ${lfs_bootscripts_dir}/${lfs_bootscripts_latest} | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/lfs-bootscripts.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $lfs_bootscripts_latest does not match the trusted one."
+      echo    "This means the package was updated recently, or the repository was attacked."
+      echo -e "The tarball '$lfs_bootscripts_latest' might have malicious content inside.${default}"
+      lfs_bootscripts_invalid_func() {
+        read -p "Proceed anyway? (y,N):" lfs_bootscripts_invalid
+        if [[ -z "$lfs_bootscripts_invalid" ]]; then
+          lfs_bootscripts_invalid=n
+        fi
+        case $lfs_bootscripts_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) LFS-Bootscripts.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            lfs_bootscripts_invalid_func
+        esac
+      }
+      lfs_bootscripts_invalid_func
+    fi
+    cd $lfs_bootscripts_dir
+    echo -e "${info}Extracting $lfs_bootscripts_latest contents...${default}"
+    tar -xf ${lfs_bootscripts_dir}/${lfs_bootscripts_latest}
+    cd $OLDPWD
     # Save progress
     echo "`sed '/save_download_final/d'  $fullsavename`" > $fullsavename
     echo -e "save_download_final=1\n" >> $fullsavename
