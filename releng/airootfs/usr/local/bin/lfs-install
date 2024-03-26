@@ -1,5 +1,5 @@
 #! /bin/bash
-# lfs-install - minimal system installation
+# lfs-install - chroot enviornment installation
 # Copyright (C) 2023 Beloglazov Mark <justaguy3331@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify it under
@@ -13,13 +13,14 @@
 #
 # You should have received a copy of the GNU General Public License along with
 # this program.  If not, see <http://www.gnu.org/licenses/>.
-set -eu
+set -e
+set +u
 # Color codes for texts
 success="\e[0;96m" # High intensity cyan
 warning="\e[0;93m" # High intensity yellow
 error="\e[0;91m"   # High intensity red
 info="\e[0;97m"    # High intensity white
-default="\e[0m"    # White unless you modify the default shell color
+default="\e[0m"    # White (grey) unless you modify the default shell color
 
 # Read the arguments for lfs-install
 args=$(getopt -a --options d:hjks:l --long "debug:,help,one-job,keep-going,save-file:,license" -- "$@")
@@ -91,7 +92,7 @@ while true; do
 # -k --keep-going
   -k|--keep-going)
     opt_keep_going=1
-    set +eu
+    set +e
     shift 1;;
 
 # -s <var> --save-file <var>
@@ -139,13 +140,11 @@ save-error() {
 if [ -f $opt_save_file ] && [[ ! -z "$opt_save_file" ]]; then
   source $opt_save_file
   fullsavename=$opt_save_file
-  swapon ${savedevice}1                      || true
   if [[ -z "`cat /proc/swaps | grep ${savedevice}1`" ]]; then
-    exit 1
+    swapon ${savedevice}1
   fi
-  mount  ${savedevice}2 $savelocation        || true
   if ! mountpoint -q "${savelocation}"; then
-    exit 1
+    mount ${savedevice}2 $savelocation
   fi
   if [[ -z "$save_build_preparation" ]]; then
     save_build_preparation=0
@@ -171,6 +170,12 @@ if [ -f $opt_save_file ] && [[ ! -z "$opt_save_file" ]]; then
   fi
   case $save_virtual_filesystems in
     1)
+      umount ${savelocation}/dev/pts || true
+      umount ${savelocation}/dev/shm || true
+      umount ${savelocation}/dev     || true
+      umount ${savelocation}/proc    || true
+      umount ${savelocation}/sys     || true
+      umount ${savelocation}/run     || true
       mkdir -pv $savelocation/{dev,proc,sys,run}
       mount -v --bind  /dev  ${savelocation}/dev
       mount -vt devpts devpts -o gid=5,mode=0620 ${savelocation}/dev/pts
@@ -277,7 +282,8 @@ case $save_partitions in
         fi
         case $umountbusydevice in
           [Yy])
-            umount -v ${parteddevice}?* || true
+            umount   -v ${parteddevice}?* || true
+            swapoff  -v ${parteddevice}?* || true
           ;;
           [Nn])
             exit 1
@@ -317,7 +323,7 @@ case $save_partitions in
         case $partitiontable in
           [Yy])
             echo -e "${info}Using MBR partition table.${default}"
-            parted --script $parteddevice mktable msdos
+            parted --script $parteddevice mktable msdos || echo "Make sure your current directory isn't (in) a mountpoint."; exit 1
             decide-swap-size
             parted --script $parteddevice mkpart  primary  linux-swap 1MiB            $swapsize       || decide-swap-size
             parted --script $parteddevice mkpart  primary  ext4       $swapsize       ${partedlfs}MiB || decide-swap-size
@@ -325,7 +331,7 @@ case $save_partitions in
           ;;
           [Nn])
             echo -e "${info}Using GPT partition table.${default}"
-            parted --script $parteddevice mktable gpt
+            parted --script $parteddevice mktable gpt   || echo "Make sure your current directory isn't (in) a mountpoint."; exit 1
             decide-swap-size
             parted --script $parteddevice mkpart  lfs-swap linux-swap 1MiB            $swapsize       || decide-swap-size
             parted --script $parteddevice mkpart  lfs      ext4       $swapsize       ${partedlfs}MiB || decide-swap-size
@@ -424,7 +430,7 @@ save-argument() {
     echo "`sed '/save_created/d'    $fullsavename`" > $fullsavename
     echo "`sed '/savedevice/d'      $fullsavename`" > $fullsavename
     echo "`sed '/savelocation/d'    $fullsavename`" > $fullsavename
-    echo -e "savedevice=$parteddevice\nsavelocation=`dirname "$savelocation"`\nsave_partitions=1\nsave_created=1\n" >> $fullsavename
+    echo -e "savedevice=$parteddevice\nsavelocation=`realpath $savelocation`\nsave_partitions=1\nsave_created=1\n" >> $fullsavename
   fi
 }
 save-argument
@@ -495,7 +501,7 @@ case $save_created in
     echo "`sed '/save_created/d'    $fullsavename`" > $fullsavename
     echo "`sed '/savedevice/d'      $fullsavename`" > $fullsavename
     echo "`sed '/savelocation/d'    $fullsavename`" > $fullsavename
-    echo -e "savedevice=$parteddevice\nsavelocation=`dirname "$savelocation"`\nsave_partitions=1\nsave_created=1\n" >> $fullsavename # write certain variables to save file
+    echo -e "savedevice=$parteddevice\nsavelocation=`realpath $savelocation`\nsave_partitions=1\nsave_created=1\n" >> $fullsavename # write certain variables to save file
     echo -e "${success}Save file successfully created.${default}"
     echo -e "${info}You can run 'lfs-install -s ${fullsavename}' next time to continue where you stopped.${default}"
     read -p "Press enter to continue."
@@ -517,7 +523,7 @@ case $save_build_preparation in
     # Chapter 4
     mkdir -pv ${savelocation}/{etc,var} ${savelocation}/usr/{bin,lib,sbin}
     for i in bin lib sbin; do
-      ln -sv usr/$i ${savelocation}/$i
+      ln -sv ${savelocation}/usr/$i ${savelocation}/$i
     done
     case $(uname -m) in
       x86_64)
@@ -591,7 +597,8 @@ case $save_cross_binutils in
                                                 --target=$(uname -m)-lfs-linux-gnu \
                                                 --disable-nls                      \
                                                 --enable-gprofng=no                \
-                                                --disable-werror
+                                                --disable-werror                   \
+                                                --enable-default-hash-style=gnu
     popd
     case $opt_one_job in
       1)
@@ -944,10 +951,10 @@ case $save_target_glibc in
     # Chapter 5.5.1
     case $(uname -m) in
       i?86)
-        ln -sfv ${glibc_dir}/${glibc_pkg}/ld-linux.so.2 ${savelocation}/lib/ld-lsb.so.3
+        ln -sfv ${savelocation}/lib/ld-linux.so.2 ${savelocation}/lib/ld-lsb.so.3
       ;;
       x86_64)
-        ln -sfv ${savelocation}/lib/ld-linux-x86-64.so.2 ${savelocation}/lib64
+        ln -sfv ${savelocation}/lib/ld-linux-x86-64.so.2 ${savelocation}/lib64/ld-linux-x86-64.so.2
         ln -sfv ${savelocation}/lib/ld-linux-x86-64.so.2 ${savelocation}/lib64/ld-lsb-x86-64.so.3
       ;;
     esac
@@ -959,7 +966,7 @@ case $save_target_glibc in
     mkdir -v ${glibc_dir}/build || true
     pushd ${glibc_dir}/build
       ${glibc_dir}/${glibc_pkg}/configure                         \
-        --prefix=${savelocation}/usr                              \
+        --prefix=/usr                                             \
         --host=$(uname -m)-lfs-linux-gnu                          \
         --build=$(${glibc_dir}/${glibc_pkg}/scripts/config.guess) \
         --enable-kernel=4.19                                      \
@@ -970,11 +977,11 @@ case $save_target_glibc in
     case $opt_one_job in
       1)
         make -C ${glibc_dir}/build
-        make -C ${glibc_dir}/build install
+        make -C ${glibc_dir}/build DESTDIR=${savelocation} install
       ;;
       *)
         make -C ${glibc_dir}/build -j$(nproc)
-        make -C ${glibc_dir}/build -j$(nproc) install
+        make -C ${glibc_dir}/build -j$(nproc) DESTDIR=${savelocation} install
     esac
     sed '/RTLDLIST=/s@/usr@@g' -i ${savelocation}/usr/bin/ldd
     # Save progress
@@ -1007,7 +1014,7 @@ case $save_target_libstdcpp in
                                --disable-multilib                            \
                                --disable-nls                                 \
                                --disable-libstdcxx-pch                       \
-                               --with-gxx-include-dir=/tools/$(uname -m)-lfs-linux-gnu/include/c++/13.2.0
+                               --with-gxx-include-dir=/tools/$(uname -m)-lfs-linux-gnu/include/c++/${gcc_latest#gcc-}
     popd
     case $opt_one_job in
       1)
@@ -2080,8 +2087,12 @@ case $save_temp_binutils in
   1)
   ;;
   0)
+    binutils_dir=${savelocation}/sources/binutils
+    binutils_latest=$(ls $binutils_dir | grep binutils.*\.tar\.xz)
+    binutils_pkg=$(basename ${binutils_dir}/$binutils_latest .tar.xz)
     # We already have the source, but 'make distclean' doesn't seem to work properly
-    rm -r ${binutils_dir}/${binutils_pkg}
+    echo -e "${info}Removing ${binutils_dir}/$binutils_pkg for rebuilding...${default}"
+    rm -r ${binutils_dir}/${binutils_pkg} || true
     pushd ${binutils_dir}
       tar -xf ${binutils_dir}/${binutils_latest}
     popd
@@ -2126,7 +2137,7 @@ case $save_temp_gcc in
   ;;
   0)
     # Obtain GCC source code, again.
-    echo -e "${info}Removing gcc source code for rebuilding...${default}"
+    echo -e "${info}Removing ${gcc_dir}/${gcc_pkg} for rebuilding...${default}"
     rm -r ${gcc_dir}/${gcc_pkg} || true
     gcc_dir=${savelocation}/sources/gcc
     mkdir -pv $gcc_dir
@@ -2361,7 +2372,7 @@ case $save_virtual_filesystems in
     save-error "save_virtual_filesystems"
 esac
 
-# Download missing sources to chroot directory ($savelocation).
+# Download additional temporary tools.
 if [[ -z "$save_download_additional" ]]; then
   save_download_additional=0
 fi
@@ -2540,8 +2551,8 @@ case $save_download_additional in
     util_linux_dir=${savelocation}/sources/util-linux
     mkdir -pv $util_linux_dir
     # And yet another fixed version
-    util_linux_repo="https://www.kernel.org/pub/linux/utils/util-linux/v2.39/util-linux-2.39.3.tar.xz"
-    util_linux_pkg=util_linux-2.39.3
+    util_linux_repo="https://mirrors.edge.kernel.org/pub/linux/utils/util-linux/v2.39/util-linux-2.39.3.tar.xz"
+    util_linux_pkg=util-linux-2.39.3
     curl ${util_linux_repo} --output ${util_linux_dir}/${util_linux_pkg}.tar.xz
     checksum=`sha512sum ${util_linux_dir}/${util_linux_pkg}.tar.xz | awk '{print $1}'`
     if [ "$checksum" != "`cat /etc/lfs-install/util-linux.sha512`" ]; then
@@ -2626,7 +2637,7 @@ case $save_download_final in
     # Fixed version
     iana_etc_repo="https://github.com/Mic92/iana-etc/releases/download/20240125/iana-etc-20240125.tar.gz"
     iana_etc_latest=iana-etc-20240125
-    curl $iana_etc_repo --output ${iana_etc_dir}/${iana_etc_latest}.tar.gz
+    curl --location $iana_etc_repo --output ${iana_etc_dir}/${iana_etc_latest}.tar.gz
     checksum=`sha512sum ${iana_etc_dir}/${iana_etc_latest}.tar.gz | awk '{print $1}'`
     if [ "$checksum" != "`cat /etc/lfs-install/iana-etc.sha512`" ]; then
       echo -e "${warning}Warning: the SHA-512 checksum of ${iana_etc_latest}.tar.gz does not match the trusted one."
@@ -2658,7 +2669,7 @@ case $save_download_final in
     tzd_dir=${savelocation}/sources/tzd
     mkdir -pv $tzd_dir
     tzd_repo="https://data.iana.org/time-zones/releases/"
-    tzd_latest=$(curl -s "${tzd_repo}" | grep -Eo '(tzdata[0-9]+[a-z]*.tar.gz' | sort -V | tail -1)
+    tzd_latest=$(curl -s "${tzd_repo}" | grep -Eo '(tzdata[0-9]+[a-z]*).tar.gz' | sort -V | tail -1)
     # Remove an unexpected newline from the beginning
     tzd_latest=${tzd_latest#\n}
     curl ${tzd_repo}/$tzd_latest --output ${tzd_dir}/${tzd_latest}
@@ -2764,8 +2775,8 @@ case $save_download_final in
     zstd_latest=${zstd_latest#Zstandard }
     zstd_latest=${zstd_latest%'<'}
     zstd_ver=${zstd_latest#v}
-    curl ${zstd_repo}/download/${zstd_latest}/zstd-${zstd_ver}.tar.gz --output ${zstd_dir}/zstd-${zstd_ver}.tar.gz
-    checksum=`sha512sum ${zstd_dir}/zstd-${zstd_ver} | awk '{print $1}'`
+    curl --location ${zstd_repo}/download/${zstd_latest}/zstd-${zstd_ver}.tar.gz --output ${zstd_dir}/zstd-${zstd_ver}.tar.gz
+    checksum=`sha512sum ${zstd_dir}/zstd-${zstd_ver}.tar.gz | awk '{print $1}'`
     if [ "$checksum" != "`cat /etc/lfs-install/zstd.sha512`" ]; then
       echo -e "${warning}Warning: the SHA-512 checksum of zstd-${zstd_ver}.tar.gz does not match the trusted one."
       echo    "This means the package was updated recently, or the repository was attacked."
@@ -2828,9 +2839,9 @@ case $save_download_final in
     readline_patch_dir=$(basename "$readline_latest" .tar.gz)
     readline_patch_repo="https://www.linuxfromscratch.org/patches/lfs/12.1/readline-8.2-upstream_fixes-3.patch"
     readline_patch_name=readline-8.2-upstream_fixes-3.patch
-    patch_checksum=`sha512sum ${readline_dir}/${readline_patch_dir}/${readline_patch_name} | awk '{print $1}'`
     curl ${readline_patch_repo} --output ${readline_dir}/${readline_patch_dir}/$readline_patch_name
-    if [ "$checksum" != "`cat /etc/lfs-install/readline-patch.sha512`" ]; then
+    patch_checksum=`sha512sum ${readline_dir}/${readline_patch_dir}/${readline_patch_name} | awk '{print $1}'`
+    if [ "$patch_checksum" != "`cat /etc/lfs-install/readline-patch.sha512`" ]; then
       echo -e "${warning}Warning: the SHA-512 checksum of $readline_patch_name does not match the trusted one."
       echo    "This means the patch was updated recently, or the repository was attacked."
       echo -e "$readline_patch_name might have malicious content inside.${default}"
@@ -2890,12 +2901,12 @@ case $save_download_final in
     mkdir -pv $flex_dir
     # pain
     flex_repo="https://github.com/westes/flex/releases"
-    flex_latest=$(curl -s "${flex_repo}" | grep -Eo 'flex v([0-9]+([.][0-9]*)*)+' | sort -V | tail -1)
+    flex_latest=$(curl -s "${flex_repo}" | grep -Eo 'flex ([0-9]+([.][0-9]*)*)+' | sort -V | tail -1)
     flex_latest=${flex_latest#flex }
     flex_latest=${flex_latest%'<'}
     flex_ver=${flex_latest#v}
     curl ${flex_repo}/download/${flex_latest}/flex-${flex_ver}.tar.gz --output ${flex_dir}/flex-${flex_ver}.tar.gz
-    checksum=`sha512sum ${flex_dir}/flex-${flex_ver} | awk '{print $1}'`
+    checksum=`sha512sum ${flex_dir}/flex-${flex_ver}.tar.gz | awk '{print $1}'`
     if [ "$checksum" != "`cat /etc/lfs-install/flex.sha512`" ]; then
       echo -e "${warning}Warning: the SHA-512 checksum of flex-${flex_ver}.tar.gz does not match the trusted one."
       echo    "This means the package was updated recently, or the repository was attacked."
@@ -3163,8 +3174,7 @@ case $save_download_final in
     libxcrypt_latest=$(curl -s "${libxcrypt_repo}" | grep -Eo 'v([0-9]+([.][0-9]*)*)+' | sort -V | tail -1)
     libxcrypt_ver=${libxcrypt_latest#v}
     curl ${libxcrypt_repo}/download/${libxcrypt_latest}/libxcrypt-${libxcrypt_ver}.tar.xz --output ${libxcrypt_dir}/libxcrypt-${libxcrypt_ver}.tar.xz
-    libxcrypt_latest=libxcrypt-${libxcrypt_ver}
-    unset libxcrypt_ver
+    libxcrypt_latest=libxcrypt-${libxcrypt_ver}.tar.xz
     checksum=`sha512sum ${libxcrypt_dir}/${libxcrypt_latest} | awk '{print $1}'`
     if [ "$checksum" != "`cat /etc/lfs-install/libxcrypt.sha512`" ]; then
       echo -e "${warning}Warning: the SHA-512 checksum of $libxcrypt_latest does not match the trusted one."
@@ -3189,8 +3199,8 @@ case $save_download_final in
       libxcrypt_invalid_func
     fi
     cd $libxcrypt_dir
-    echo -e "${info}Extracting ${libxcrypt_latest}.tar.xz contents...${default}"
-    tar -xf ${libxcrypt_dir}/${libxcrypt_latest}.tar.xz
+    echo -e "${info}Extracting ${libxcrypt_latest} contents...${default}"
+    tar -xf ${libxcrypt_dir}/${libxcrypt_latest}
     cd $OLDPWD
     # Shadow, programs for handling passwords in a secure way
     shadow_dir=${savelocation}/sources/shadow
@@ -3199,8 +3209,8 @@ case $save_download_final in
     shadow_latest=$(curl -s "${shadow_repo}" | grep -Eo '([0-9]+([.][0-9]*)*)+:' | sort -V | tail -1)
     shadow_latest=${shadow_latest%':'}
     curl ${shadow_repo}/download/${shadow_latest}/shadow-${shadow_latest}.tar.xz --output ${shadow_dir}/shadow-${shadow_latest}.tar.xz
-    shadow_latest=shadow-${shadow_latest}
-    checksum=`sha512sum ${shadow_dir}/${shadow_latest}.tar.xz | awk '{print $1}'`
+    shadow_latest=shadow-${shadow_latest}.tar.xz
+    checksum=`sha512sum ${shadow_dir}/${shadow_latest} | awk '{print $1}'`
     if [ "$checksum" != "`cat /etc/lfs-install/shadow.sha512`" ]; then
       echo -e "${warning}Warning: the SHA-512 checksum of $shadow_latest does not match the trusted one."
       echo    "This means the package was updated recently, or the repository was attacked."
@@ -3224,8 +3234,8 @@ case $save_download_final in
       shadow_invalid_func
     fi
     cd $shadow_dir
-    echo -e "${info}Extracting ${shadow_latest}.tar.xz contents...${default}"
-    tar -xf ${shadow_dir}/${shadow_latest}.tar.xz
+    echo -e "${info}Extracting ${shadow_latest} contents...${default}"
+    tar -xf ${shadow_dir}/${shadow_latest}
     cd $OLDPWD
     # Psmisc, miscellaneous utilities that use the proc filesystem
     psmisc_dir=${savelocation}/sources/psmisc

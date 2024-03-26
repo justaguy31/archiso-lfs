@@ -13,7 +13,7 @@
 #
 # You should have received a copy of the GNU General Public License along with
 # this program.  If not, see <http://www.gnu.org/licenses/>.
-set -eu
+set -e
 # Color codes for texts
 success="\e[0;96m" # High intensity cyan
 warning="\e[0;93m" # High intensity yellow
@@ -4410,12 +4410,21 @@ case $save_final_finish in
     # Save progress
     echo "`sed '/save_final_finish/d'  $fullsavename`" > $fullsavename
     echo -e "save_final_finish=1\n" >> $fullsavename
-    echo -e "${info}You would like to log out of the chroot environment, power off,"
-    echo -e "remove the installation image, and boot the Linux From Scratch system now.${default}"
-    echo    "Issue the following to power off the installation image:"
-    echo    "logout"
-    echo -e "systemctl poweroff${default}"
-    exit 0
+    if [ "$(stat -c %d:%i /)" != "$(stat -c %d:%i /proc/1/root/.)" ]; then
+      echo -e "${info}You would like to log out of the chroot environment, power off,"
+      echo -e "remove the installation image, and boot the Linux From Scratch system now.${default}"
+      echo    "Issue the following to power off the installation image:"
+      echo    "logout"
+      echo -e "systemctl poweroff${default}"
+      exit 0
+    else
+      echo -e "${info}You would like to remove lfs-install remains from the system."
+      echo    "Issue the following to do so:"
+      echo    "rm -v /usr/bin/lfs-install-chroot"
+      echo    "If you also want to remove the lfs-install license:"
+      echo -e "rm -vr /usr/share/doc/lfs-install${default}"
+      exit 0
+    fi
   ;;
   *)
     save-error "save_final_finish"

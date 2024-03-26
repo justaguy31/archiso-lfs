@@ -4,7 +4,7 @@ Ethernet, WLAN and WWAN interfaces using DHCP should work automatically.
 
 After connecting to the internet, you can run [35mlfs-install[0m
 to install the modified Linux From Scratch.
-Note that most commands can be stopped by pressing Left Ctrl + C.
+Note that most commands can be stopped by pressing [35mLeft Ctrl + C[0m.
 
 See <https://wiki.archlinux.org> for more information.
 
