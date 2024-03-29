@@ -1,0 +1,163 @@
+#!/bin/bash --noprofile
+
+# DO ALMOST ANYTHING PUBLIC LICENSE
+# Everyone is permitted to copy and distribute verbatim or modified
+# copies of this code for any purpose as long as any "Credit"
+# lines are not removed.
+
+#Credit: /u/linuxversion
+#Source: https://gist.github.com/SomeCrazyGuy/e3b77251ae533b4ded2bafc880ba8262
+#Raw source: https://gist.github.com/SomeCrazyGuy/e3b77251ae533b4ded2bafc880ba8262/raw/49367fab486a9db6ba05ddc35cfb1235d9a2ab3c/bash_pager.sh
+
+#extra strict flags
+set -euo pipefail
+
+#so I don't accidently forget whats builtin and whats not
+PATH=''
+
+#configuration options
+declare -i cfg_line_numbers=1
+
+#globals
+declare -a file_map
+declare -i file_offset=0
+declare -i file_lines=0
+declare -i term_height=0
+declare -i term_width=0
+declare -i textarea_height=0
+declare -i textarea_line=0
+declare -i command_line=0
+
+#move the cursor to a specific row and colunm
+function put_cursor() {
+	echo -en "\e[${1};${2}f"
+}
+
+#basically the same as the libncurses function of the same name
+function mvprintw() {
+	local row="$1"; shift
+	local col="$1"; shift
+	
+	printf "%s%s%s" $'\x1b[' "${row};${col}f" "$@"
+}
+
+#self-explanatory
+function clear_screen() {
+	echo -en '\e[2J'
+}
+
+#erase text from command line to bottom of screen
+function clear_command_line() {
+	mvprintw "$command_line" 0 $'\x1b[J'
+}
+
+function init_screen() {
+	#set terminal configuration to default
+	#echo -en '\ec'
+	
+	#get the size of the terminal
+	put_cursor 999 999
+	echo -en '\e[6n'
+	read -s -r -d'['
+	read -s -r -d';' term_height
+	read -s -r -d'R' term_width
+	
+	#do some math to position the various graphical elements
+	textarea_line=0
+	textarea_height=$term_height
+	command_line=$term_height
+	
+	clear_screen
+	put_cursor "$command_line" 0
+}
+
+#draw text on the screen from memory with offset
+function render_text() {
+	clear_screen
+	
+	#figure out how many lines we can render
+	local modifier="$1"
+	local lines=$textarea_height
+	local last_screen=$((file_lines - textarea_height))
+	
+	file_offset=$((file_offset + modifier))
+	
+	[ $file_offset -gt $last_screen ] && file_offset=$last_screen
+	[ $file_offset -lt 0 ] && file_offset=0
+	[ $lines -gt $file_lines ] && lines=$file_lines
+	
+	#draw text in the viewing area
+	local fd_offset
+	local term_offset
+	for (( i=0; i<lines; ++i ))
+	do
+		fd_offset=$((i+file_offset))
+		term_offset=$((i+textarea_line))
+		[ $cfg_line_numbers -eq 1 ] && {
+			mvprintw "${term_offset}" 0 "${fd_offset}"
+			mvprintw "${term_offset}" 6 "${file_map[$fd_offset]}"
+		} || {
+			mvprintw "${term_offset}" 0 "${file_map[$fd_offset]}"
+		}
+	done
+}
+
+function main() {
+	#arg check
+	if (( $# > 0 )) && [ -f "$1" ]
+	then 
+		mapfile file_map <"$1"
+	else	
+		echo 'Usage: bash-pager <file>'
+		return 1
+	fi
+	
+	file_lines="${#file_map[@]}"
+	
+	init_screen
+	render_text 0
+	
+	#read keys and perform actions
+	while read -s -r -N1
+	do
+		case "$REPLY" in
+		( $'\x1b' ) #ESC pressed, handle sequence
+			read -s -r -N1
+			case "$REPLY" in
+			( $'\x1b' ) #second escape, eval user input
+				read -e -r -p ': '
+				set +eu
+				eval "$REPLY"
+				set -eu
+				;;
+			( '[' ) #arrow key or pgup/pgdown
+				read -s -r -N1
+				case "$REPLY" in
+				( 'A' ) #arrow up
+					render_text -1
+					;;
+				( 'B' ) #arrow down
+					render_text 1
+					;;
+				( '5' ) #pgup
+					render_text "-$((textarea_height/2))"
+					;;
+				( '6' ) #pgdown
+					render_text "$((textarea_height/2))"
+					;;
+				esac
+				;;
+			esac
+			;;
+		( 'q' ) #quit
+			return 0
+			;;
+		esac
+		
+		#input keys have been read display results
+		clear_command_line
+		put_cursor "$command_line" 0
+	done
+}
+
+main $@

@@ -22,94 +22,119 @@ info="\e[0;97m"    # High intensity white
 default="\e[0m"    # White unless you modify the default shell color
 
 # Read the arguments for lfs-install
-args=$(getopt -a --options d:fhjks:l --long "debug:,full-save,help,one-job,keep-going,save-file:,license" -- "$@")
-if [ $? -ne 0 ]; then
-  echo "Run 'lfs-install -h' or 'lfs-install --help' for usage."
-  exit 1
-fi
-eval set -- "$args"
+if [ -f /usr/bin/getopt ]; then
+  args=$(getopt -a --options d:fhjks:l --long "debug:,full-save,help,one-job,keep-going,save-file:,license" -- "$@")
+  if [ $? -ne 0 ]; then
+    echo "Run 'lfs-install -h' or 'lfs-install --help' for usage."
+    exit 1
+  fi
+  eval set -- "$args"
 
-while true; do
-  case "$1" in
-# -d <var> --debug <var>
-# a - print everything
-# b - only print current stage of installation
-# v - print which scripts and Makefile recipes were invoked and when they exited
-# j - print which sub-commands were invoked and when they exited
-# p - print which directories were invoked
-# n - print no debugging information
-  -d|--debug)
-    case "$2" in
-      xv)
-        set -xv
-      ;;
-      vx)
-        set -vx
-      ;;
-      x)
-        set -x
-      ;;
-      v)
-        set -v
-      ;;
-      n)
-        set +vx
-    esac
-    shift 2;;
+  while true; do
+    case "$1" in
+  # -d <var> --debug <var>
+    -d|--debug)
+      case "$2" in
+        xv)
+          set -xv
+        ;;
+        vx)
+          set -vx
+        ;;
+        x)
+          set -x
+        ;;
+        v)
+          set -v
+        ;;
+        n)
+          set +vx
+      esac
+      shift 2;;
 
 # -h --help
-  -h|--help)
-    echo "Usage:"
-    echo " lfs-install-chroot [-d <opt_debug>] [-h] [-j] [-i] [-k] [-s <filename>] [-l]"
-    echo ""
-    echo "Finish installing Linux From Scratch to the current drive."
-    echo ""
-    echo "Options:"
-    echo " -d, --debug <opt_debug>    filter debug messages by a desired level"
-    echo " -h, --help                 display this help and exit"
-    echo " -j, --one-job              do not use 'make -j\$(nproc)' option while building, should be used for debugging"
-    echo " -k, --keep-going           keep going if any error happens, very dangerous option"
-    echo " -s, --save-file <filename> define a filename or path to save file, or start with a new save file"
-    echo " -l, --license              show script license"
-    echo ""
-    echo "The 'opt_debug' argument can be:"
-    echo "'vx' or 'xv' (a combination of the two below),"
-    echo "'x'          (print every command with command substitutions and variable expansions),"
-    echo "'v'          (print every command as they're executed),"
-    echo "'n'          (print no debugging information, default mode)."
-    echo ""
-    echo "The 'filename' argument can be a path to existing savefile, or a path to a new one."
-    echo "lfs-install will prompt user for creating new file (recursively) if it doesn't exist"
-    echo "while also informing of nonexistent directories."
-    exit 0;;
+    -h|--help)
+      echo "Usage:"
+      echo " lfs-install-chroot [-d <opt_debug>] [-h] [-j] [-i] [-k] [-s <filename>] [-l]"
+      echo ""
+      echo "Finish installing Linux From Scratch to the current drive."
+      echo ""
+      echo "Options:"
+      echo " -d, --debug <opt_debug>    filter debug messages by a desired level"
+      echo " -h, --help                 display this help and exit"
+      echo " -j, --one-job              do not use 'make -j\$(nproc)' option while building, should be used for debugging"
+      echo " -k, --keep-going           keep going if any error happens, very dangerous option"
+      echo " -s, --save-file <filename> define a filename or path to save file, or start with a new save file"
+      echo " -l, --license              show script license"
+      echo ""
+      echo "The 'opt_debug' argument can be:"
+      echo "'vx' or 'xv' (a combination of the two below),"
+      echo "'x'          (print every command with command substitutions and variable expansions),"
+      echo "'v'          (print every command as they're executed),"
+      echo "'n'          (print no debugging information, default mode)."
+      echo ""
+      echo "The 'filename' argument can be a path to existing savefile, or a path to a new one."
+      echo "lfs-install will prompt user for creating new file (recursively) if it doesn't exist"
+      echo "while also informing of nonexistent directories."
+      exit 0;;
 
 # -j --one-job
-  -j|--one-job)
-    opt_one_job=1
-    shift 1;;
+    -j|--one-job)
+      opt_one_job=1
+      shift 1;;
 
 # -k --keep-going
-  -k|--keep-going)
-    set +eu
-    shift 1;;
+    -k|--keep-going)
+      set +eu
+      shift 1;;
 
 # -s <var> --save-file <var>
 # Note that this works only if your internal storage is complete.
 # If not, the script will store the var and wait.
-  -s|--save-file)
-    opt_save_file="$2"
-    shift 2;;
+    -s|--save-file)
+      opt_save_file="$2"
+      shift 2;;
 
 # -l --license
-  -l|--license)
-    echo -e "${info}Please note that you can always exit by pressing 'q'.${default}"
-    read -p "Press enter to continue."
-    less /usr/local/share/doc/lfs-install/LICENSE
-    exit 0;;
-  --)
+    -l|--license)
+      echo -e "${info}Please note that you can always exit by pressing 'q'.${default}"
+      read -p "Press enter to continue."
+      if [ -f /usr/bin/less ]; then
+        less /usr/local/share/doc/lfs-install/LICENSE
+      else
+        bash-pager /usr/local/share/doc/lfs-install/LICENSE
+      fi
+      exit 0;;
+    --)
     break;;
   esac
 done
+else
+  echo -e "${info}The script does not currently support passing arguments from the chroot environment itself."
+  echo -e "you have to install util-linux package (pending) to enable this feature.${default}"
+fi
+
+# Handle arguments passed from the lfs-install.
+case $opt_debug in
+  xv)
+    set -xv
+  ;;
+  vx)
+    set -vx
+  ;;
+  x)
+    set -x
+  ;;
+  v)
+    set -v
+  ;;
+  n)
+    set +vx
+esac
+case $opt_keep_going in
+  1)
+    set +eu
+fi
 
 echo "lfs-install-chroot Copyright (C) 2023 Beloglazov Mark <justaguy3331@gmail.com>
 
@@ -138,38 +163,40 @@ save-error() {
 if [ -f $opt_save_file ] && [[ ! -z "$opt_save_file" ]]; then
   source $opt_save_file
   fullsavename=$opt_save_file
-  swapon ${savedevice}1                      || true
   if [[ -z "`cat /proc/swaps | grep ${savedevice}1`" ]]; then
-    exit 1
+    swapon ${savedevice}1 || if [ -f ${savedevice}1 ]; then error "something very strange happened."; fi; exit 1
   fi
 else
   if [[ ! -z "$opt_save_file" ]]; then
-    echo -e "${warning}Save file not found, storing the path to possibly create it later.${default}"
+    error "No save file found, aborting."
   fi
 fi
 
-# Check whether the script is being run with sudo privileges
-sudocheck=$(whoami)
-if [[ -z "$sudocheck" ]]; then
-  error "The result of 'whoami' is empty. Perhaps your are running in chroot?${default}"
-fi
-case $sudocheck in
-  root)
-    echo -e "${success}Running as sudo (root).${default}"
-  ;;
-  *)
-    error "You must be running this script with sudo (root) privileges.${default}"
-  ;;
-esac
-
-# Additional safety checks
+# Chroot checks
 if [[ -z "$save_chroot" ]]; then
   save_chroot=0
 fi
 case $save_chroot in
   1)
     if [ "$(stat -c %d:%i /)" = "$(stat -c %d:%i /proc/1/root/.)" ]; then
-      error "You must run this script in a chroot environment.${default}"
+      if [[ -z "$save_final_finish" ]]; then
+        save_final_finish=0
+      fi
+      case $save_final_finish in
+        1)
+          echo -e "${info}You would like to remove lfs-install remains from the system."
+          echo    "Issue the following to do so:"
+          echo    "rm -v /usr/bin/lfs-install-chroot"
+          echo    "If you also want to remove the lfs-install license:"
+          echo -e "rm -vr /usr/share/doc/lfs-install${default}"
+          exit 0
+        ;;
+        0)
+          error "You must run this script in a chroot environment.${default}"
+        ;;
+        *)
+          save-error "save_final_finish"
+      esac
     fi
   ;;
   0)
@@ -198,10 +225,10 @@ case $save_chroot_dirs in
     mkdir   -pv  /usr/{,local/}share/man/man{1..8}
     mkdir   -pv  /var/{cache,local,log,mail,opt,spool}
     mkdir   -pv  /var/lib/{color,misc,locate}
-    ln      -sfv /run      /var/run
-    ln      -sfv /run/lock /var/lock
-    install -dv -m 0750    /root
-    install -dv -m 1777    /tmp /var/tmp
+    ln      -sfv ../run      /var/run
+    ln      -sfv ../run/lock /var/lock
+    install -dv -m 0750      /root
+    install -dv -m 1777      /tmp /var/tmp
     # Save progress
     echo "`sed '/save_chroot_dirs/d'  $fullsavename`" > $fullsavename
     echo -e "save_chroot_dirs=1\n" >> $fullsavename
@@ -219,7 +246,7 @@ case $save_chroot_files in
   1)
   ;;
   0)
-    ln -sv /proc/self/mounts /etc/mtab
+    ln -sv ../proc/self/mounts /etc/mtab
     # Create /etc/hosts
     echo -e "${info}Creating /etc/hosts...${default}"
     echo '127.0.0.1 localhost $(hostname)' >  /etc/hosts
@@ -270,7 +297,7 @@ case $save_chroot_files in
     echo -e "${info}Restarting the shell...${default}"
     # Here we go again
     chroot_options=""
-    if [[ -z "$opt_debug" ]]; then
+    if [[ ! -z "$opt_debug" ]]; then
       chroot_options="$chroot_options -d $opt_debug"
     fi
     case $opt_full_save in
@@ -285,7 +312,7 @@ case $save_chroot_files in
       1)
         chroot_options="$chroot_options -k"
     esac
-    if [[ -z "$opt_save_file" ]]; then
+    if [[ ! -z "$opt_save_file" ]]; then
       chroot_options="$chroot_options -s ${opt_save_file#$savelocation}"
     fi
     exec /usr/bin/bash --login lfs-install-chroot $chroot_options
@@ -325,7 +352,8 @@ case $save_temp_gettext in
   ;;
   0)
     gettext_dir=/sources/gettext
-    gettext_pkg=$(basename "`ls $gettext_dir | grep gettext*/`" /)
+    gettext_pkg=$(ls $gettext_dir | grep .tar.xz)
+    gettext_pkg=$(basename ${gettext_dir}/$gettext_pkg .tar.xz)
     pushd ${gettext_dir}/$gettext_pkg
       ${gettext_dir}/${gettext_pkg}/configure --disable-shared
     popd
@@ -355,7 +383,8 @@ case $save_temp_bison in
   ;;
   0)
     bison_dir=/sources/bison
-    bison_pkg=$(basename "`ls $bison_dir | grep bison*/`" /)
+    bison_pkg=$(ls $bison_dir | grep .tar.xz)
+    bison_pkg=$(basename ${bison_dir}/$bison_pkg .tar.xz)
     pushd ${bison_dir}/$bison_pkg
       ${bison_dir}/${bison_pkg}/configure --prefix=/usr \
                                           --docdir=/usr/share/doc/$bison_pkg
@@ -387,7 +416,8 @@ case $save_temp_perl in
   ;;
   0)
     perl_dir=/sources/perl
-    perl_pkg=$(basename "`ls $perl_dir | grep perl*/`" /)
+    perl_pkg=$(ls $perl_dir | grep .tar.xz)
+    perl_pkg=$(basename ${perl_dir}/$perl_pkg .tar.xz)
     # Perl seems to have its own configure script, but still not going to trust it where to put build configuration files in
     pushd ${perl_dir}/$perl_pkg
       sh ${perl_dir}/${perl_pkg}/Configure -des                                        \
@@ -428,7 +458,9 @@ case $save_temp_python in
   ;;
   0)
     python_dir=/sources/python
-    python_pkg=$(basename "`ls $python_dir | grep python*/`" /)
+    python_pkg=$(ls $python_dir | grep .tar.xz)
+    python_pkg=$(basename ${python_dir}/$python_pkg .tar.xz)
+    python_pkg=Python${python_pkg#python}
     pushd ${python_dir}/$python_pkg
       ${python_dir}/${python_pkg}/configure --prefix=/usr   \
                                             --enable-shared \
@@ -461,7 +493,8 @@ case $save_temp_texinfo in
   ;;
   0)
     texinfo_dir=/sources/texinfo
-    texinfo_pkg=$(basename "`ls $texinfo_dir | grep texinfo*/`" /)
+    texinfo_pkg=$(ls $texinfo_dir | grep .tar.xz)
+    texinfo_pkg=$(basename ${texinfo_dir}/$texinfo_pkg .tar.xz)
     pushd ${texinfo_dir}/$texinfo_pkg
       ${texinfo_dir}/${texinfo_pkg}/configure --prefix=/usr
     popd
@@ -492,7 +525,8 @@ case $save_temp_util_linux in
   ;;
   0)
     util_linux_dir=/sources/util-linux
-    util_linux_pkg=$(basename "`ls $util_linux_dir | grep util-linux*/`" /)
+    util_linux_pkg=$(ls $util_linux_dir | grep .tar.xz)
+    util_linux_pkg=$(basename ${util_linux_dir}/$util_linux_pkg .tar.xz)
     pushd ${util_linux_dir}/$util_linux_pkg
       ${util_linux_dir}/${util_linux_pkg}/configure --libdir=/usr/lib                     \
                                                     --runstatedir=/run                    \
@@ -518,8 +552,8 @@ case $save_temp_util_linux in
         make -C ${util_linux_dir}/$util_linux_pkg -j$(nproc) install
     esac
     # Save progress
-    echo "`sed '/save_temp_gettext/d'  $fullsavename`" > $fullsavename
-    echo -e "save_temp_gettext=1\n" >> $fullsavename
+    echo "`sed '/save_temp_util_linux/d'  $fullsavename`" > $fullsavename
+    echo -e "save_temp_util_linux=1\n" >> $fullsavename
     echo -e "${success}Temporary util-linux package successfully installed.${default}"
   ;;
   *)
@@ -561,7 +595,8 @@ case $save_final_man_pages in
   ;;
   0)
     man_pages_dir=/sources/man-pages
-    man_pages_pkg=$(basename "`ls $man_pages_dir | grep man-pages*/`" /)
+    man_pages_pkg=$(ls $man_pages_dir | grep .tar.xz)
+    man_pages_pkg=$(basename ${man_pages_dir}/$man_pages_pkg .tar.xz)
     # Chapter 8.3.1
     rm -v ${man_pages_dir}/${man_pages_pkg}/man3/crypt* || true
     if [[ -f ${man_pages_dir}/${man_pages_pkg}/man3/crypt* ]]; then
@@ -578,7 +613,7 @@ case $save_final_man_pages in
     echo "`sed '/save_final_man_pages/d'  $fullsavename`" > $fullsavename
     echo -e "save_final_man_pages=1\n" >> $fullsavename
     echo -e "${success}Linux Man-pages successfully installed.${default}"
-    echo -e "Removing ${man_pages_dir}/${man_pages_pkg}, please do not cancel this process..."
+    echo -e "${info}Removing ${man_pages_dir}/${man_pages_pkg}, please do not cancel this process...${default}"
     rm -r ${man_pages_dir}/${man_pages_pkg} || true
   ;;
   *)
@@ -586,26 +621,27 @@ case $save_final_man_pages in
 esac
 
 # Iana-Etc package
-if [[ -z "$save_final_man_pages" ]]; then
-  save_final_man_pages=0
+if [[ -z "$save_final_iana_etc" ]]; then
+  save_final_iana_etc=0
 fi
-case $save_final_man_pages in
+case $save_final_iana_etc in
   1)
   ;;
   0)
     iana_etc_dir=/sources/iana-etc
-    iana_etc_pkg=$(basename "`ls $iana_etc_dir | grep iana-etc*/`" /)
+    iana_etc_pkg=$(ls $iana_etc_dir | grep .tar.gz)
+    iana_etc_pkg=$(basename ${iana_etc_dir}/$iana_etc_pkg .tar.gz)
     # Chapter 8.4.1
-    cp ${iana_etc_dir}/${iana_etc_pkg}/{services,protocols} /etc
+    cp -v ${iana_etc_dir}/${iana_etc_pkg}/{services,protocols} /etc
     # Save progress
     echo "`sed '/save_final_iana_etc/d'  $fullsavename`" > $fullsavename
     echo -e "save_final_iana_etc=1\n" >> $fullsavename
     echo -e "${success}Iana-Etc package successfully installed.${default}"
-    echo -e "Removing ${iana_etc_dir}/${iana_etc_pkg}, please do not cancel this process..."
+    echo -e "${info}Removing ${iana_etc_dir}/${iana_etc_pkg}, please do not cancel this process...${default}"
     rm -r ${iana_etc_dir}/${iana_etc_pkg} || true
   ;;
   *)
-    save-error "save_final_man_pages"
+    save-error "save_final_iana_etc"
 esac
 
 # GNU C library
@@ -617,7 +653,10 @@ case $save_final_glibc in
   ;;
   0)
     glibc_dir=/sources/glibc
-    glibc_pkg=$(basename "`ls $glibc_dir | grep glibc*/`" /)
+    glibc_pkg=$(ls $glibc_dir | grep .tar.xz)
+    glibc_pkg=$(basename ${glibc_dir}/$glibc_pkg .tar.xz)
+    # In case there's no 'build' directory
+    mkdir -pv ${glibc_dir}/build
     # Cleaning up after previous build
     case $opt_one_job in
       1)
@@ -628,7 +667,7 @@ case $save_final_glibc in
     esac
     # Chapter 8.5.1 (this would still not be the final distro, so it doesn't matter if I install Linux From Scratch Glibc)
     pushd ${glibc_dir}/${glibc_pkg}
-      patch -Np1 -i ${glibc_dir}/${glibc_pkg}/glibc-2.39-fhs-1.patch
+      patch -Np1 -i ${glibc_dir}/${glibc_pkg}/glibc-2.39-fhs-1.patch || true
     popd
     echo "rootsbindir=/usr/sbin" > ${glibc_dir}/${glibc_pkg}/configparms
     pushd ${glibc_dir}/build
@@ -642,11 +681,42 @@ case $save_final_glibc in
     case $opt_one_job in
       1)
         make -C ${glibc_dir}/build
-        make -C ${glibc_dir}/build TIMEOUTFACTOR=15 check || true
+        echo -e "${warning}Building tests can take too long and too much storage space.${default}"
+        glibc_check_func() {
+          read -p "Are you sure you want to check GNU Glibc for sanity? (y/N)" glibc_check
+          if [[ -z "$glibc_check" ]]; then
+            glibc_check=n
+          fi
+          case $glibc_check in
+            [Yy])
+              make -C ${glibc_dir}/build TIMEOUTFACTOR=15 check || true
+            ;;
+            [Nn])
+            ;;
+            *)
+              glibc_check_func
+          esac
+        }
+        glibc_check_func
       ;;
       *)
         make -C ${glibc_dir}/build -j$(nproc)
-        make -C ${glibc_dir}/build -j$(nproc) TIMEOUTFACTOR=15 check || true
+        glibc_check_func() {
+          read -p "Are you sure you want to check GNU Glibc for sanity? (y/N)" glibc_check
+          if [[ -z "$glibc_check" ]]; then
+            glibc_check=n
+          fi
+          case $glibc_check in
+            [Yy])
+              make -C ${glibc_dir}/build -j$(nproc) TIMEOUTFACTOR=15 check || true
+            ;;
+            [Nn])
+            ;;
+            *)
+              glibc_check_func
+          esac
+        }
+        glibc_check_func
     esac
     touch /etc/ld.so.conf
     sed '/test-installation/s@$(PERL)@echo not running@' -i ${glibc_dir}/build/Makefile
@@ -717,28 +787,26 @@ case $save_final_glibc in
     echo 'rpc: files'       >> /etc/nsswitch.conf
     # Install Time Zone Database
     tzd_dir=/sources/tzd
-    tzd_latest=$(basename "`ls $tzd_dir | grep tzdata*/`" /)
     ZONEINFO=/usr/share/zoneinfo
     mkdir -pv $ZONEINFO/{posix,right}
-    for tz in ${tzd_dir}/${tzd_latest}/etcetera     \
-              ${tzd_dir}/${tzd_latest}/southamerica \
-              ${tzd_dir}/${tzd_latest}/northamerica \
-              ${tzd_dir}/${tzd_latest}/europe       \
-              ${tzd_dir}/${tzd_latest}/africa       \
-              ${tzd_dir}/${tzd_latest}/antarctica   \
-              ${tzd_dir}/${tzd_latest}/asia         \
-              ${tzd_dir}/${tzd_latest}/australasia  \
-              ${tzd_dir}/${tzd_latest}/backward; do
+    for tz in ${tzd_dir}/etcetera     \
+              ${tzd_dir}/southamerica \
+              ${tzd_dir}/northamerica \
+              ${tzd_dir}/europe       \
+              ${tzd_dir}/africa       \
+              ${tzd_dir}/antarctica   \
+              ${tzd_dir}/asia         \
+              ${tzd_dir}/australasia  \
+              ${tzd_dir}/backward; do
       zic -L /dev/null                            -d $ZONEINFO       ${tz}
       zic -L /dev/null                            -d $ZONEINFO/posix ${tz}
-      zic -L ${tzd_dir}/${tzd_latest}/leapseconds -d $ZONEINFO/right ${tz}
+      zic -L ${tzd_dir}/leapseconds               -d $ZONEINFO/right ${tz}
     done
-    cp -v ${tzd_dir}/${tzd_latest}/zone.tab ${tzd_dir}/${tzd_latest}/zone1970.tab ${tzd_dir}/${tzd_latest}/iso3166.tab $ZONEINFO
+    cp -v ${tzd_dir}/zone.tab ${tzd_dir}/zone1970.tab ${tzd_dir}/iso3166.tab $ZONEINFO
     zic -d $ZONEINFO -p America/New_York
     unset ZONEINFO
     TZ_TEMP=`tzselect | tail -1`
-    ln -sfv /usr/share/zoneinfo/$TZ_TEMP /etc/localtime
-    
+    ln -sfv ../usr/share/zoneinfo/$TZ_TEMP /etc/localtime
     echo -e "${info}Creating /etc/ld.so.conf...${default}"
     echo '/usr/local/lib'                   >  /etc/ld.so.conf
     echo '/opt/lib'                         >> /etc/ld.so.conf
@@ -748,10 +816,9 @@ case $save_final_glibc in
     echo "`sed '/save_final_glibc/d'  $fullsavename`" > $fullsavename
     echo -e "save_final_glibc=1\n" >> $fullsavename
     echo -e "${success}GNU C library successfully installed.${default}"
-    echo -e "Removing ${glibc_dir}/${glibc_pkg}, please do not cancel this process..."
+    echo -e "${info}Removing ${glibc_dir}/${glibc_pkg} and ${glibc_dir}/build, please do not cancel this process...${default}"
     rm -r ${glibc_dir}/${glibc_pkg} || true
-    echo -e "Removing ${tzd_dir}/${tzd_latest}, please do not cancel this process..."
-    rm -r ${tzd_dir}/${tzd_latest}  || true
+    rm -r ${glibc_dir}/build        || true
   ;;
   *)
     save-error "save_final_glibc"
@@ -766,7 +833,8 @@ case $save_final_zlib in
   ;;
   0)
     zlib_dir=/sources/zlib
-    zlib_pkg=$(basename "`ls $zlib_dir | grep zlib*/`" /)
+    zlib_pkg=$(ls $zlib_dir | grep .tar.gz)
+    zlib_pkg=$(basename ${zlib_dir}/$zlib_pkg .tar.gz)
     pushd ${zlib_dir}/${zlib_pkg}
       ${zlib_dir}/${zlib_pkg}/configure --prefix=/usr
     popd
@@ -786,7 +854,7 @@ case $save_final_zlib in
     echo "`sed '/save_final_zlib/d'  $fullsavename`" > $fullsavename
     echo -e "save_final_zlib=1\n" >> $fullsavename
     echo -e "${success}Zlib, A Massively Spiffy Yet Delicately Unobtrusive Compression Library successfully installed.${default}"
-    echo -e "Removing ${zlib_dir}/${zlib_pkg}, please do not cancel this process..."
+    echo -e "${info}Removing ${zlib_dir}/${zlib_pkg}, please do not cancel this process...${default}"
     rm -r ${zlib_dir}/${zlib_pkg} || true
   ;;
   *)
@@ -802,7 +870,8 @@ case $save_final_bzip2 in
   ;;
   0)
     bzip2_dir=/sources/bzip2
-    bzip2_pkg=$(basename "`ls $bzip2_dir | grep bzip2*/`" /)
+    bzip2_pkg=$(ls $bzip2_dir | grep .tar.gz)
+    bzip2_pkg=$(basename ${bzip2_dir}/$bzip2_pkg .tar.gz)
     # Chapter 8.7.1
     sed -i 's@\(ln -s -f \)$(PREFIX)/bin/@\1@'   ${bzip2_dir}/${bzip2_pkg}/Makefile
     sed -i "s@(PREFIX)/man@(PREFIX)/share/man@g" ${bzip2_dir}/${bzip2_pkg}/Makefile
@@ -820,17 +889,17 @@ case $save_final_bzip2 in
         make -C ${bzip2_dir}/${bzip2_pkg} -j$(nproc) PREFIX=/usr install
     esac
     cp -av ${bzip2_dir}/${bzip2_pkg}/libbz2.so.*     /usr/lib
-    ln -sv ${bzip2_dir}/${bzip2_pkg}/libbz2.so.1.0.8 /usr/lib/libbz2.so
+    ln -sv ./libbz2.so.1.0.8                         /usr/lib/libbz2.so
     cp -v  ${bzip2_dir}/${bzip2_pkg}/bzip2-shared    /usr/bin/bzip2
     for i in /usr/bin/{bzcat,bunzip2}; do
-      ln -sfv ${bzip2_dir}/${bzip2_pkg}/bzip2 $i
+      ln -sfv ./bzip2 $i
     done
     rm -fv /usr/lib/libbz2.a
     # Save progress
     echo "`sed '/save_final_bzip2/d'  $fullsavename`" > $fullsavename
     echo -e "save_final_bzip2=1\n" >> $fullsavename
     echo -e "${success}bzip2 data compressor successfully installed.${default}"
-    echo -e "Removing ${bzip2_dir}/${bzip2_pkg}, please do not cancel this process..."
+    echo -e "${info}Removing ${bzip2_dir}/${bzip2_pkg}, please do not cancel this process...${default}"
     rm -r ${bzip2_dir}/${bzip2_pkg} || true
   ;;
   *)
@@ -846,7 +915,8 @@ case $save_final_xz in
   ;;
   0)
     xz_dir=/sources/xz
-    xz_pkg=$(basename "`ls $xz_dir | grep xz*/`" /)
+    xz_pkg=$(ls $xz_dir | grep .tar.xz)
+    xz_pkg=$(basename ${xz_dir}/$xz_pkg .tar.xz)
     pushd ${xz_dir}/${xz_pkg}
       ${xz_dir}/${xz_pkg}/configure --prefix=/usr    \
                   --disable-static \
@@ -871,7 +941,7 @@ case $save_final_xz in
     echo "`sed '/save_final_xz/d'  $fullsavename`" > $fullsavename
     echo -e "save_final_xz=1\n" >> $fullsavename
     echo -e "${success}Xz Utils successfully installed.${default}"
-    echo -e "Removing ${xz_dir}/${xz_pkg}, please do not cancel this process..."
+    echo -e "${info}Removing ${xz_dir}/${xz_pkg}, please do not cancel this process...${default}"
     rm -r ${xz_dir}/${xz_pkg} || true
   ;;
   *)
@@ -887,7 +957,8 @@ case $save_final_zstd in
   ;;
   0)
     zstd_dir=/sources/zstd
-    zstd_pkg=$(basename "`ls $zstd_dir | grep zstd*/`" /)
+    zstd_pkg=$(ls $zstd_dir | grep .tar.gz)
+    zstd_pkg=$(basename ${zstd_dir}/$zstd_pkg .tar.gz)
     case $opt_one_job in
       1)
         make -C ${zstd_dir}/${zstd_pkg} prefix=/usr
@@ -903,7 +974,7 @@ case $save_final_zstd in
     echo "`sed '/save_final_zstd/d'  $fullsavename`" > $fullsavename
     echo -e "save_final_zstd=1\n" >> $fullsavename
     echo -e "${success}Zstandard data compression algorithm successfully installed.${default}"
-    echo -e "Removing ${zstd_dir}/${zstd_pkg}, please do not cancel this process..."
+    echo -e "${info}Removing ${zstd_dir}/${zstd_pkg}, please do not cancel this process...${default}"
     rm -r ${zstd_dir}/${zstd_pkg} || true
   ;;
   *)
@@ -919,7 +990,8 @@ case $save_final_file in
   ;;
   0)
     file_dir=/sources/file
-    file_pkg=$(basename "`ls $file_dir | grep file*/`" /)
+    file_pkg=$(ls $file_dir | grep .tar.gz)
+    file_pkg=$(basename ${file_dir}/$file_pkg .tar.gz)
     # Clean up after previous build
     case $opt_one_job in
       1)
@@ -963,7 +1035,8 @@ case $save_final_readline in
   ;;
   0)
     readline_dir=/sources/readline
-    readline_pkg=$(basename "`ls $readline_dir | grep readline*/`" /)
+    readline_pkg=$(ls $readline_dir | grep .tar.gz)
+    readline_pkg=$(basename ${readline_dir}/$readline_pkg .tar.gz)
     # Chapter 8.11.1
     sed -i '/MV.*old/d'    ${readline_dir}/${readline_pkg}/Makefile.in
     sed -i '/{OLDSUFF}/c:' ${readline_dir}/${readline_pkg}/support/shlib-install
@@ -1004,7 +1077,8 @@ case $save_final_m4 in
   ;;
   0)
     m4_dir=/sources/m4
-    m4_pkg=$(basename "`ls $m4_dir | grep m4*/`" /)
+    m4_pkg=$(ls $m4_dir | grep .tar.xz)
+    m4_pkg=$(basename ${m4_dir}/$m4_pkg .tar.xz)
     case $opt_one_job in
       1)
         make -C ${m4_dir}/${m4_pkg} distclean || true
@@ -1046,7 +1120,8 @@ case $save_final_bc in
   ;;
   0)
     bc_dir=/sources/bc
-    bc_pkg=$(basename "`ls $bc_dir | grep bc*/`" /)
+    bc_pkg=$(ls $bc_dir | grep .tar.gz)
+    bc_pkg=$(basename ${bc_dir}/$bc_pkg .tar.gz)
     pushd ${bc_dir}/${bc_pkg}
       ${bc_dir}/${bc_pkg}/configure --prefix=/usr -G -O3 -r
     popd
@@ -1081,7 +1156,8 @@ case $save_final_flex in
   ;;
   0)
     flex_dir=/sources/flex
-    flex_pkg=$(basename "`ls $flex_dir | grep flex*/`" /)
+    flex_pkg=$(ls $flex_dir | grep .tar.gz)
+    flex_pkg=$(basename ${flex_dir}/$flex_pkg .tar.gz)
     pushd ${flex_dir}/${flex_pkg}
       ${flex_dir}/${flex_pkg}/configure --prefix=/usr                       \
                                         --docdir=/usr/share/doc/${flex_pkg} \
@@ -1098,8 +1174,8 @@ case $save_final_flex in
         make -C ${flex_dir}/${flex_pkg} -j$(nproc) check || true
         make -C ${flex_dir}/${flex_pkg} -j$(nproc) install
     esac
-    ln -sv /usr/bin/flex              /usr/bin/lex
-    ln -sv /usr/share/man/man1/flex.1 /usr/share/man/man1/lex.1
+    ln -sv ./flex   /usr/bin/lex
+    ln -sv ./flex.1 /usr/share/man/man1/lex.1
     # Save progress
     echo "`sed '/save_final_flex/d'  $fullsavename`" > $fullsavename
     echo -e "save_final_flex=1\n" >> $fullsavename
@@ -1120,7 +1196,8 @@ case $save_final_tcl in
   ;;
   0)
     tcl_dir=/sources/tcl
-    tcl_pkg=$(basename "`ls $tcl_dir | grep tcl*/`" /)
+    tcl_pkg=$(ls $tcl_dir | grep .tar.gz)
+    tcl_pkg=$(basename ${tcl_dir}/$tcl_pkg .tar.gz)
     # Chapter 8.15.1
     pushd ${tcl_dir}/${tcl_pkg}/unix
       SRCDIR=${tcl_dir}/${tcl_pkg}
@@ -1166,7 +1243,7 @@ case $save_final_tcl in
       *)
         make -C ${tcl_dir}/${tcl_pkg} -j$(nproc) install-private-headers
     esac
-    ln -sfv /usr/bin/tclsh8.6 /usr/bin/tclsh
+    ln -sfv ./tclsh8.6 /usr/bin/tclsh
     mv /usr/share/man/man3/{Thread,Tcl_Thread}.3
     # Save progress
     echo "`sed '/save_final_tcl/d'  $fullsavename`" > $fullsavename
@@ -1189,7 +1266,8 @@ case $save_final_expect in
   0)
     python3 -c 'from pty import spawn; spawn(["echo", "PTYs are working fine"])'
     expect_dir=/sources/expect
-    expect_pkg=$(basename "`ls $expect_dir | grep expect*/`" /)
+    expect_pkg=$(ls $expect_dir | grep .tar.gz)
+    expect_pkg=$(basename ${expect_dir}/$expect_pkg .tar.gz)
     pushd ${expect_dir}/${expect_pkg}
       ${expect_dir}/${expect_pkg}/configure --prefix=/usr           \
                                             --with-tcl=/usr/lib     \
@@ -1207,7 +1285,7 @@ case $save_final_expect in
         make -C ${expect_dir}/${expect_pkg} -j$(nproc) test || true
         make -C ${expect_dir}/${expect_pkg} -j$(nproc) install
     esac
-    ln -svf /usr/lib/expect5.45.4/libexpect5.45.4.so /usr/lib
+    ln -svf ./expect5.45.4/libexpect5.45.4.so /usr/lib/libxexpect5.45.4.so
     # Save progress
     echo "`sed '/save_final_expect/d'  $fullsavename`" > $fullsavename
     echo -e "save_final_expect=1\n" >> $fullsavename
@@ -1228,7 +1306,8 @@ case $save_final_dejagnu in
   ;;
   0)
     dejagnu_dir=/sources/dejagnu
-    dejagnu_pkg=$(basename "`ls $dejagnu_dir | grep dejagnu*/`" /)
+    dejagnu_pkg=$(ls $dejagnu_dir | grep .tar.gz)
+    dejagnu_pkg=$(basename ${dejagnu_dir}/$dejagnu_pkg .tar.gz)
     mkdir -v ${dejagnu_dir}/${dejagnu_pkg}/build || true
     pushd ${dejagnu_dir}/${dejagnu_pkg}/build
       ${dejagnu_dir}/${dejagnu_pkg}/configure --prefix=/usr
@@ -1268,7 +1347,8 @@ case $save_final_pkgconf in
   ;;
   0)
     pkgconf_dir=/sources/pkgconf
-    pkgconf_pkg=$(basename "`ls $pkgconf_dir | grep pkgconf*/`" /)
+    pkgconf_pkg=$(ls $pkgconf_dir | grep .tar.xz)
+    pkgconf_pkg=$(basename ${pkgconf_dir}/$pkgconf_pkg .tar.xz)
     pushd ${pkgconf_dir}/$pkgconf_pkg
       ${pkgconf_dir}/${pkgconf_pkg}/configure --prefix=/usr              \
                                               --disable-static           \
@@ -1283,8 +1363,8 @@ case $save_final_pkgconf in
         make -C ${pkgconf_dir}/${pkgconf_pkg} -j$(nproc)
         make -C ${pkgconf_dir}/${pkgconf_pkg} -j$(nproc) install
     esac
-    ln -sv /usr/bin/pkgconf              /usr/bin/pkg-config
-    ln -sv /usr/share/man/man1/pkgconf.1 /usr/share/man/man1/pkg-config.1
+    ln -sv ./pkgconf   /usr/bin/pkg-config
+    ln -sv ./pkgconf.1 /usr/share/man/man1/pkg-config.1
     # Save progress
     echo "`sed '/save_final_pkgconf/d'  $fullsavename`" > $fullsavename
     echo -e "save_final_pkgconf=1\n" >> $fullsavename
@@ -1305,13 +1385,16 @@ case $save_final_binutils in
   ;;
   0)
     binutils_dir=/sources/binutils
-    binutils_pkg=$(basename "`ls $binutils_dir | grep binutils*/`" /)
+    binutils_pkg=$(ls $binutils_dir | grep .tar.xz)
+    binutils_pkg=$(basename ${binutils_dir}/$binutils_pkg .tar.xz)
     case $opt_one_job in
       1)
         make -C ${binutils_dir}/${binutils_pkg} distclean || true
+        make -C ${binutils_dir}/build           distclean || true
       ;;
       *)
         make -C ${binutils_dir}/${binutils_pkg} -j $(nproc) distclean || true
+        make -C ${binutils_dir}/build           -j $(nproc) distclean || true
     esac
     mkdir -v ${binutls_dir}/build
     pushd ${binutils_dir}/build
@@ -1358,7 +1441,8 @@ case $save_final_gmp in
   ;;
   0)
     gcc_dir=/sources/gcc
-    gcc_pkg=$(basename "`ls $gcc_dir | grep gcc*/`" /)
+    gcc_pkg=$(ls $gcc_dir | grep .tar.xz)
+    gcc_pkg=$(basename ${gcc_dir}/$gcc_pkg .tar.xz)
     gmp_dir=${gcc_dir}/${gcc_pkg}/gmp
     gmp_pkg="gmp-$(${gmp_dir}/configure --version | grep "GNU MP configure" | awk '{print $4}')"
     # GMP is located at GCC source code directory
@@ -1411,7 +1495,8 @@ case $save_final_mpfr in
   ;;
   0)
     gcc_dir=/sources/gcc
-    gcc_pkg=$(basename "`ls $gcc_dir | grep gcc*/`" /)
+    gcc_pkg=$(ls $gcc_dir | grep .tar.xz)
+    gcc_pkg=$(basename ${gcc_dir}/$gcc_pkg .tar.xz)
     mpfr_dir=${gcc_dir}/${gcc_pkg}/mpfr
     mpfr_pkg="mpfr-$(${mpfr_dir}/configure --version | grep "MPFR configure" | awk '{print $3}')"
     pushd $mpfr_dir
@@ -1456,7 +1541,8 @@ case $save_final_mpc in
   ;;
   0)
     gcc_dir=/sources/gcc
-    gcc_pkg=$(basename "`ls $gcc_dir | grep gcc*/`" /)
+    gcc_pkg=$(ls $gcc_dir | grep .tar.xz)
+    gcc_pkg=$(basename ${gcc_dir}/$gcc_pkg .tar.xz)
     mpc_dir=${gcc_dir}/${gcc_pkg}/mpc
     mpc_pkg="mpc-$(${mpc_dir}/configure --version | grep "mpc configure" | awk '{print $3}')"
     pushd $mpc_dir
@@ -1500,7 +1586,8 @@ case $save_final_attr in
   ;;
   0)
     attr_dir=/sources/attr
-    attr_pkg=$(basename "`ls $attr_dir | grep attr*/`" /)
+    attr_pkg=$(ls $attr_dir | grep .tar.xz)
+    attr_pkg=$(basename ${attr_dir}/$attr_pkg .tar.xz)
     pushd ${attr_dir}/$attr_pkg
       ${attr_dir}/${attr_pkg}/configure --prefix=/usr     \
                                         --disable-static  \
@@ -1538,7 +1625,8 @@ case $save_final_acl in
   ;;
   0)
     acl_dir=/sources/acl
-    acl_pkg=$(basename "`ls $acl_dir | grep acl*/`" /)
+    acl_pkg=$(ls $acl_dir | grep .tar.xz)
+    acl_pkg=$(basename ${acl_dir}/$acl_pkg .tar.xz)
     pushd ${acl_dir}/$acl_pkg
       ${acl_dir}/${acl_pkg}/configure --prefix=/usr         \
                                       --disable-static      \
@@ -1573,7 +1661,8 @@ case $save_final_libcap in
   ;;
   0)
     libcap_dir=/sources/libcap
-    libcap_pkg=$(basename "`ls $libcap_dir | grep libcap*/`" /)
+    libcap_pkg=$(ls $libcap_dir | grep .tar.xz)
+    libcap_pkg=$(basename ${libcap_dir}/$libcap_pkg .tar.xz)
     # Chapter 8.25.1
     sed -i '/install -m.*STA/d' ${libcap_dir}/${libcap_pkg}/libcap/Makefile
     case $opt_one_job in
@@ -1607,7 +1696,8 @@ case $save_final_libxcrypt in
   ;;
   0)
     libxcrypt_dir=/sources/libxcrypt
-    libxcrypt_pkg=$(basename "`ls $libxcrypt_dir | grep libxcrypt*/`" /)
+    libxcrypt_pkg=$(ls $libxcrypt_dir | grep .tar.xz)
+    libxcrypt_pkg=$(basename ${libxcrypt_dir}/$libxcrypt_pkg .tar.xz)
     pushd ${libxcrypt_dir}/$libxcrypt_pkg
       ${libxcrypt_dir}/${libxcrypt_pkg}/configure --prefix=/usr                \
                                                   --enable-hashes=strong,glibc \
@@ -1647,7 +1737,8 @@ case $save_final_shadow in
   ;;
   0)
     shadow_dir=/sources/shadow
-    shadow_pkg=$(basename "`ls $libxcrypt_dir | grep libxcrypt*/`" /)
+    shadow_pkg=$(ls $shadow_dir | grep .tar.xz)
+    shadow_pkg=$(basename ${shadow_dir}/$shadow_pkg .tar.xz)
     sed -i 's/groups$(EXEEXT) //' ${shadow_dir}/${shadow_pkg}/src/Makefile.in
     find man -name ${shadow_dir}/${shadow_pkg}/Makefile.in -exec sed -i 's/groups\.1 / /'   {} \;
     find man -name ${shadow_dir}/${shadow_pkg}/Makefile.in -exec sed -i 's/getspnam\.3 / /' {} \;
@@ -1714,7 +1805,8 @@ case $save_final_gcc in
   ;;
   0)
     gcc_dir=/sources/gcc
-    gcc_pkg=$(basename "`ls $gcc_dir | grep gcc*/`" /)
+    gcc_pkg=$(ls $gcc_dir | grep .tar.xz)
+    gcc_pkg=$(basename ${gcc_dir}/$gcc_pkg .tar.xz)
     case $(uname -m) in
       x86_64)
         sed -e      '/m64=/s/lib64/lib/' \
@@ -1756,9 +1848,10 @@ case $save_final_gcc in
         make -C ${gcc_dir}/build -j(nproc) install
     esac
     chown -v -R root:root /usr/lib/gcc/$(gcc -dumpmachine)/${gcc_pkg#gcc-}/include{,-fixed}
-    ln -svr /usr/bin/cpp /usr/lib
-    ln -sv /usr/share/man/man1/gcc.1 /usr/share/man/man1/cc.1
-    ln -sfv /libexec/gcc/$(gcc -dumpmachine)/${gcc_pkg#gcc-}/liblto_plugin.so /usr/lib/bfd-plugins/
+    ln -svr ../bin/cpp /usr/lib/cpp
+    ln -sv  ./gcc.1    /usr/share/man/man1/cc.1
+    ln -sfv ../../libexec/gcc/$(gcc -dumpmachine)/${gcc_pkg#gcc-}/liblto_plugin.so \
+                       /usr/lib/bfd-plugins/liblto_plugin.so
     echo -e "${info}Testing the just built GCC for simple sanity...${default}"
     echo 'int main(){}' > /home/TrustedInstaller/dummy.c
     cc /home/TrustedInstaller/dummy.c -v -Wl,--verbose &> /home/TrustedInstaller/dummy.log
@@ -1803,7 +1896,8 @@ case $save_final_ncurses in
   ;;
   0)
     ncurses_dir=/sources/ncurses
-    ncurses_pkg=$(basename "`ls $ncurses_dir | grep ncurses*/`" /)
+    ncurses_pkg=$(ls $ncurses_dir | grep .tar.gz)
+    ncurses_pkg=$(basename ${ncurses_dir}/$ncurses_pkg .tar.gz)
     # Clean up after previous build
     case $opt_one_job in
       1)
@@ -1838,10 +1932,10 @@ case $save_final_ncurses in
         -i ${ncurses_dir}/${ncurses_pkg}/dest/usr/include/curses.h
     cp -av ${ncurses_dir}/${ncurses_pkg}/dest/* /
     for lib in ncurses form panel menu ; do
-      ln -sfv /usr/lib/lib${lib}w.so           /usr/lib/lib${lib}.so
-      ln -sfv /usr/lib/pkgconfig/${lib}w.pc    /usr/lib/pkgconfig/${lib}.pc
+      ln -sfv ./lib${lib}w.so /usr/lib/lib${lib}.so
+      ln -sfv ./${lib}w.pc    /usr/lib/pkgconfig/${lib}.pc
     done
-    ln -sfv /usr/lib/libncursesw.so /usr/lib/libcurses.so
+    ln -sfv ./libncursesw.so /usr/lib/libcurses.so
     cp -v -R ${ncurses_dir}/${ncurses_pkg}/doc -T /usr/share/doc/$ncurses_pkg
     # Save progress
     echo "`sed '/save_final_ncurses/d'  $fullsavename`" > $fullsavename
@@ -1863,7 +1957,8 @@ case $save_final_sed in
   ;;
   0)
     sed_dir=/sources/sed
-    sed_pkg=$(basename "`ls $sed_dir | grep sed*/`" /)
+    sed_pkg=$(ls $sed_dir | grep .tar.xz)
+    sed_pkg=$(basename ${sed_dir}/$sed_pkg .tar.xz)
     # Clean up after previous build
     case $opt_one_job in
       1)
@@ -1916,7 +2011,8 @@ case $save_final_psmisc in
   ;;
   0)
     psmisc_dir=/sources/psmisc
-    psmisc_pkg=$(basename "`ls $psmisc_dir | grep psmisc*/`" /)
+    psmisc_pkg=$(ls $psmisc_dir | grep .tar.xz)
+    psmisc_pkg=$(basename ${psmisc_dir}/$psmisc_pkg .tar.xz)
     pushd ${psmisc_dir}/$psmisc_pkg
       ${psmisc_dir}/${psmisc_pkg}/configure --prefix=/usr
     popd
@@ -1951,7 +2047,8 @@ case $save_final_gettext in
   ;;
   0)
     gettext_dir=/sources/gettext
-    gettext_pkg=$(basename "`ls $gettext_dir | grep gettext*/`" /)
+    gettext_pkg=$(ls $gettext_dir | grep .tar.xz)
+    gettext_pkg=$(basename ${gettext_dir}/$gettext_pkg .tar.xz)
     pushd ${gettext_dir}/$gettext_pkg
       ${gettext_dir}/${gettext_pkg}/configure --prefix=/usr    \
                                               --disable-static \
@@ -1989,7 +2086,8 @@ case $save_final_bison in
   ;;
   0)
     bison_dir=/sources/bison
-    bison_pkg=$(basename "`ls $bison_dir | grep bison*/`" /)
+    bison_pkg=$(ls $bison_dir | grep .tar.xz)
+    bison_pkg=$(basename ${bison_dir}/$bison_pkg .tar.xz)
     pushd ${bison_dir}/$bison_pkg
       ${bison_dir}/$bison_pkg/configure --prefix=/usr \
                                         --docdir=/usr/share/doc/$bison_pkg
@@ -2025,7 +2123,8 @@ case $save_final_grep in
   ;;
   0)
     grep_dir=/sources/grep
-    grep_pkg=$(basename "`ls $grep_dir | grep grep*/`" /)
+    grep_pkg=$(ls $grep_dir | grep .tar.xz)
+    grep_pkg=$(basename ${grep_dir}/$grep_pkg .tar.xz)
     # Clean up after previous build
     case $opt_one_job in
       1)
@@ -2069,7 +2168,8 @@ case $save_final_bash in
   ;;
   0)
     bash_dir=/sources/bash
-    bash_pkg=$(basename "`ls $bash_dir | grep bash*/`" /)
+    bash_pkg=$(ls $bash_dir | grep .tar.gz)
+    bash_pkg=$(basename ${bash_dir}/$bash_pkg .tar.gz)
     # Clean up after previous build
     case $opt_one_job in
       1)
@@ -2083,6 +2183,7 @@ case $save_final_bash in
       ${bash_dir}/${bash_pkg}/configure --prefix=/usr             \
                                         --without-bash-malloc     \
                                         --with-installed-readline \
+                                        --enable-net-redirections
                                         --docdir=/usr/share/doc/$bash_pkg
     popd
     case $opt_one_job in
@@ -2126,7 +2227,7 @@ EOF       || true
     save-error "save_final_bash"
 esac
 
-# GNU Libtool generic library support script
+# GNU Libtool, a generic library support script
 if [[ -z "$save_final_libtool" ]]; then
   save_final_libtool=0
 fi
@@ -2135,7 +2236,8 @@ case $save_final_libtool in
   ;;
   0)
     libtool_dir=/sources/libtool
-    libtool_pkg=$(basename "`ls $libtool_dir | grep libtool*/`" /)
+    libtool_pkg=$(ls $libtool_dir | grep .tar.xz)
+    libtool_pkg=$(basename ${libtool_dir}/$libtool_pkg .tar.xz)
     pushd ${libtool_dir}/$libtool_pkg
       ${libtool_dir}/${libtool_pkg}/configure --prefix=/usr
     popd
@@ -2154,7 +2256,7 @@ case $save_final_libtool in
     # Save progress
     echo "`sed '/save_final_libtool/d'  $fullsavename`" > $fullsavename
     echo -e "save_final_libtool=1\n" >> $fullsavename
-    echo -e "${success}GNU Libtool generic library support script successfully installed.${default}"
+    echo -e "${success}GNU Libtool, a generic library support script successfully installed.${default}"
     echo -e "${info}Removing ${libtool_dir}/${libtool_pkg}, please do not cancel this process...${default}"
     rm -r ${libtool_dir}/${libtool_pkg} || true
   ;;
@@ -2171,7 +2273,8 @@ case $save_final_gdbm in
   ;;
   0)
     gdbm_dir=/sources/gdbm
-    gdbm_pkg=$(basename "`ls $gdbm_dir | grep gdbm*/`" /)
+    gdbm_pkg=$(ls $gdbm_dir | grep .tar.gz)
+    gdbm_pkg=$(basename ${gdbm_dir}/$gdbm_pkg .tar.gz)
     pushd ${gdbm_dir}/$gdbm_pkg
       ${gdbm_dir}/${gdbm_pkg}/configure --prefix=/usr    \
                                         --disable-static \
@@ -2208,7 +2311,8 @@ case $save_final_gperf in
   ;;
   0)
     gperf_dir=/sources/gperf
-    gperf_pkg=$(basename "`ls $gperf_dir | grep gperf*/`" /)
+    gperf_pkg=$(ls $gperf_dir | grep .tar.gz)
+    gperf_pkg=$(basename ${gperf_dir}/$gperf_pkg .tar.gz)
     pushd ${gperf_dir}/${gperf_pkg}
       ${gperf_dir}/${gperf_pkg}/configure --prefix=/usr \
                                           --docdir=/usr/share/doc/$gperf_pkg
@@ -2244,7 +2348,8 @@ case $save_final_expat in
   ;;
   0)
     expat_dir=/sources/expat
-    expat_pkg=$(basename "`ls $expat_dir | grep expat*/`" /)
+    expat_pkg=$(ls $expat_dir | grep .tar.xz)
+    expat_pkg=$(basename ${expat_dir}/$expat_pkg .tar.xz)
     pushd ${expat_dir}/$expat_pkg
       ${expat_dir}/${expat_pkg}/configure --prefix=/usr    \
                                           --disable-static \
@@ -2282,7 +2387,8 @@ case $save_final_inetutils in
   ;;
   0)
     inetutils_dir=/sources/inetutils
-    inetutils_pkg=$(basename "`ls $inetutils_dir | grep inetutils*/`" /)
+    inetutils_pkg=$(ls $inetutils_dir | grep .tar.xz)
+    inetutils_pkg=$(basename ${inetutils_dir}/$inetutils_pkg .tar.xz)
     pushd ${inetutils_dir}/$inetutils_pkg
       ${inetutils_dir}/${inetutils_pkg}/configure --prefix=/usr        \
                                                   --bindir=/usr/bin    \
@@ -2327,7 +2433,8 @@ case $save_final_less in
   ;;
   0)
     less_dir=/sources/less
-    less_pkg=$(basename "`ls $less_dir | grep less*/`" /)
+    less_pkg=$(ls $less_dir | grep .tar.gz)
+    less_pkg=$(basename ${less_dir}/$less_pkg .tar.gz)
     pushd ${less_dir}/$less_pkg
       ${less_dir}/${less_pkg}/configure --prefix=/usr \
                                         --sysconfdir=/etc
@@ -2363,7 +2470,8 @@ case $save_final_perl in
   ;;
   0)
     perl_dir=/sources/perl
-    perl_pkg=$(basename "`ls $perl_dir | grep perl*/`" /)
+    perl_pkg=$(ls $perl_dir | grep .tar.xz)
+    perl_pkg=$(basename ${perl_dir}/$perl_pkg .tar.xz)
     # Clean up after previous build
     case $opt_one_job in
       1)
@@ -2375,19 +2483,19 @@ case $save_final_perl in
     export BUILD_ZLIB=False
     export BUILD_BZIP2=0
     pushd ${perl_dir}/$perl_pkg
-      sh ${perl_dir}/${perl_pkg}/Configure -des                                         \
-                                           -Dprefix=/usr                                \
-                                           -Dvendorprefix=/usr                          \
+      sh ${perl_dir}/${perl_pkg}/Configure -des                                                      \
+                                           -Dprefix=/usr                                             \
+                                           -Dvendorprefix=/usr                                       \
                                            -Dprivlib=/usr/lib/perl5/${perl_pkg#perl-}/core_perl      \
                                            -Darchlib=/usr/lib/perl5/${perl_pkg#perl-}/core_perl      \
                                            -Dsitelib=/usr/lib/perl5/${perl_pkg#perl-}/site_perl      \
                                            -Dsitearch=/usr/lib/perl5/${perl_pkg#perl-}/site_perl     \
                                            -Dvendorlib=/usr/lib/perl5/${perl_pkg#perl-}/vendor_perl  \
                                            -Dvendorarch=/usr/lib/perl5/${perl_pkg#perl-}/vendor_perl \
-                                           -Dman1dir=/usr/share/man/man1                \
-                                           -Dman3dir=/usr/share/man/man3                \
-                                           -Dpager="/usr/bin/less -isR"                 \
-                                           -Duseshrplib                                 \
+                                           -Dman1dir=/usr/share/man/man1                             \
+                                           -Dman3dir=/usr/share/man/man3                             \
+                                           -Dpager="/usr/bin/less -isR"                              \
+                                           -Duseshrplib                                              \
                                            -Dusethreads
     popd
     case $opt_one_job in
@@ -2422,7 +2530,8 @@ case $save_final_xml_parser in
   ;;
   0)
     xml_parser_dir=/sources/xml::parser
-    xml_parser_pkg=$(basename "`ls $xml_parser_dir | grep XML-Parser*/`" /)
+    xml_parser_pkg=$(ls $xml_parser_dir | grep .tar.gz)
+    xml_parser_pkg=$(basename ${xml_parser_dir}/$xml_parser_pkg .tar.gz)
     pushd ${xml_parser_dir}/$xml_parser_pkg
       perl ${xml_parser_dir}/${xml_parser_pkg}/Makefile.PL
     popd
@@ -2457,7 +2566,8 @@ case $save_final_intltool in
   ;;
   0)
     intltool_dir=/sources/intltool
-    intltool_pkg=$(basename "`ls $intltool_dir | grep intltool*/`" /)
+    intltool_pkg=$(ls $intltool_dir | grep .tar.gz)
+    intltool_pkg=$(basename ${intltool_dir}/$intltool_pkg .tar.gz)
     # Chapter 8.44.1
     sed -i 's:\\\${:\\\$\\{:' ${intltool_dir}/${intltool_pkg}/intltool-update.in
     pushd ${intltool_dir}/${intltool_pkg}
@@ -2495,7 +2605,8 @@ case $save_final_autoconf in
   ;;
   0)
     autoconf_dir=/sources/autoconf
-    autoconf_pkg=$(basename "`ls $autoconf_dir | grep autoconf*/`" /)
+    autoconf_pkg=$(ls $autoconf_dir | grep .tar.xz)
+    autoconf_pkg=$(basename ${autoconf_dir}/$autoconf_pkg .tar.xz)
     pushd ${autoconf_dir}/${autoconf_pkg}
       ${autoconf_dir}/${autoconf_pkg}/configure --prefix=/usr
     popd
@@ -2530,7 +2641,8 @@ case $save_final_automake in
   ;;
   0)
     automake_dir=/sources/automake
-    automake_pkg=$(basename "`ls $automake_dir | grep automake*/`" /)
+    automake_pkg=$(ls $automake_dir | grep .tar.xz)
+    automake_pkg=$(basename ${automake_dir}/$automake_pkg .tar.xz)
     pushd ${automake_dir}/$automake_pkg
       ${automake_dir}/${automake_pkg}/configure --prefix=/usr \
                                                 --docdir=/usr/share/doc/$automake_pkg
@@ -2566,7 +2678,8 @@ case $save_final_openssl in
   ;;
   0)
     openssl_dir=/sources/openssl
-    openssl_pkg=$(basename "`ls $openssl_dir | grep openssl*/`" /)
+    openssl_pkg=$(ls $openssl_dir | grep .tar.gz)
+    openssl_pkg=$(basename ${openssl_dir}/$openssl_pkg .tar.gz)
     pushd ${openssl_dir}/${openssl_pkg}
       ${openssl_dir}/${openssl_pkg}/config --prefix=/usr         \
                                            --openssldir=/etc/ssl \
@@ -2609,7 +2722,8 @@ case $save_final_kmod in
   ;;
   0)
     kmod_dir=/sources/kmod
-    kmod_pkg=$(basename "`ls $kmod_dir | grep kmod*/`" /)
+    kmod_pkg=$(ls $kmod_dir | grep .tar.xz)
+    kmod_pkg=$(basename ${kmod_dir}/$kmod_pkg .tar.xz)
     pushd ${kmod_dir}/$kmod_pkg
       ${kmod_dir}/${kmod_pkg}/configure --prefix=/usr          \
                                         --sysconfdir=/etc      \
@@ -2628,9 +2742,9 @@ case $save_final_kmod in
         make -C ${kmod_dir}/${kmod_pkg} -j$(nproc) install
     esac
     for target in depmod insmod modinfo modprobe rmmod; do
-      ln -sfv /usr/bin/kmod /usr/sbin/$target
+      ln -sfv ../bin/kmod /usr/sbin/$target
     done
-    ln -sfv /usr/bin/kmod /usr/bin/lsmod
+    ln -sfv ./kmod /usr/bin/lsmod
     # Save progress
     echo "`sed '/save_final_kmod/d'  $fullsavename`" > $fullsavename
     echo -e "save_final_kmod=1\n" >> $fullsavename
@@ -2652,7 +2766,8 @@ case $save_final_libelf in
   0)
     # Libelf is part of Elfutils package
     elfutils_dir=/sources/elfutils
-    elfutils_pkg=$(basename "`ls $elfutils_dir | grep elfutils*/`" /)
+    elfutils_pkg=$(ls $elfutils_dir | grep .tar.bz2)
+    elfutils_pkg=$(basename ${elfutils_dir}/$elfutils_pkg .tar.bz2)
     pushd ${elfutils_dir}/$elfutils_pkg
       ${elfutils_dir}/${elfutils_pkg}/configure --prefix=/usr                \
                                                 --disable-debuginfod         \
@@ -2691,7 +2806,8 @@ case $save_final_libffi in
   ;;
   0)
     libffi_dir=/sources/libffi
-    libffi_pkg=$(basename "`ls $libffi_dir | grep libffi*/`" /)
+    libffi_pkg=$(ls $libffi_dir | grep .tar.gz)
+    libffi_pkg=$(basename ${libffi_dir}/$libffi_pkg .tar.gz)
     pushd ${libffi_dir}/$libffi_pkg
       ${libffi_dir}/${libffi_pkg}/configure --prefix=/usr          \
                                             --disable-static       \
@@ -2728,7 +2844,8 @@ case $save_final_python in
   ;;
   0)
     python_dir=/sources/python
-    python_pkg=$(basename "`ls $python_dir | grep Python*/`" /)
+    python_pkg=$(ls $python_dir | grep .tar.xz)
+    python_pkg=$(basename ${python_dir}/$python_pkg .tar.xz)
     # Clean up after previous build
     case $opt_one_job in
       1)
@@ -2776,7 +2893,8 @@ case $save_final_flit_core in
   ;;
   0)
     flit_core_dir=/sources/flit-core
-    flit_core_pkg=$(basename "`ls $flit_core_dir | grep flit_core*/`" /)
+    flit_core_pkg=$(ls $flit_core_dir | grep .tar.gz)
+    flit_core_pkg=$(basename ${flit_core_dir}/$flit_core_pkg .tar.gz)
     pushd ${flit_core_dir}/$flit_core_pkg
       pip3 wheel -w dist --no-cache-dir --no-build-isolation --no-deps ${flit_core_dir}/$flit_core_pkg
       pip3 install --no-index --no-user --find-links ${flit_core_dir}/${flit_core_pkg}/dist flit_core
@@ -2801,7 +2919,8 @@ case $save_final_wheel in
   ;;
   0)
     wheel_dir=/sources/wheel
-    wheel_pkg=$(basename "`ls $wheel_dir | grep wheel*/`" /)
+    wheel_pkg=$(ls $wheel_dir | grep .tar.gz)
+    wheel_pkg=$(basename ${wheel_dir}/$wheel_pkg .tar.gz)
     pushd ${wheel_dir}/$wheel_pkg
       pip3 wheel -w dist --no-cache-dir --no-build-isolation --no-deps ${wheel_dir}/$wheel_pkg
       pip3 install --no-index --find-links=${wheel_dir}/${wheel_pkg}/dist wheel
@@ -2826,7 +2945,8 @@ case $save_final_setuptools in
   ;;
   0)
     setuptools_dir=/sources/setuptools
-    setuptools_pkg=$(basename "`ls $setuptools_dir | grep setuptools*/`" /)
+    setuptools_pkg=$(ls $setuptools_dir | grep .tar.gz)
+    setuptools_pkg=$(basename ${setuptools_dir}/$setuptools_pkg .tar.gz)
     pushd ${setuptools_dir}/$setuptools_pkg
       pip3 wheel -w dist --no-cache-dir --no-build-isolation --no-deps ${setuptools_dir}/$setuptools_pkg
       pip3 install --no-index --find-links ${setuptools_dir}/${setuptools_pkg}/dist setuptools
@@ -2851,7 +2971,8 @@ case $save_final_meson in
   ;;
   0)
     meson_dir=/sources/meson
-    meson_pkg=$(basename "`ls $meson_dir | grep meson*/`" /)
+    meson_pkg=$(ls $meson_dir | grep .tar.gz)
+    meson_pkg=$(basename ${meson_dir}/$meson_pkg .tar.gz)
     pushd ${meson_dir}/$meson_pkg
       pip3 wheel -w dist --no-cache-dir --no-build-isolation --no-deps ${meson_dir}/$meson_pkg
       pip3 install --no-index --find-links ${meson_dir}/${meson_pkg}/dist meson
@@ -2880,7 +3001,8 @@ case $save_final_coreutils in
   ;;
   0)
     coreutils_dir=/sources/coreutils
-    coreutils_pkg=$(basename "`ls $coreutils_dir | grep coreutils*/`" /)
+    coreutils_pkg=$(ls $coreutils_dir | grep .tar.xz)
+    coreutils_pkg=$(basename ${coreutils_dir}/$coreutils_pkg .tar.xz)
     # Clean up after previous build
     case $opt_one_job in
       1)
@@ -2944,7 +3066,8 @@ case $save_final_check in
   ;;
   0)
     check_dir=/sources/check
-    check_pkg=$(basename "`ls $check_dir | grep check*/`" /)
+    check_pkg=$(ls $check_dir | grep .tar.gz)
+    check_pkg=$(basename ${check_dir}/$check_pkg .tar.gz)
     pushd ${check_dir}/$check_pkg
       ${check_dir}/${check_pkg}/configure --prefix=/usr \
                                           --disable-static
@@ -2980,7 +3103,8 @@ case $save_final_diffutils in
   ;;
   0)
     diffutils_dir=/sources/diffutils
-    diffutils_pkg=$(basename "`ls $diffutils_dir | grep diffutils*/`" /)
+    diffutils_pkg=$(ls $diffutils_dir | grep .tar.xz)
+    diffutils_pkg=$(basename ${diffutils_dir}/$diffutils_pkg .tar.xz)
     # Clean up after previous build
     case $opt_one_job in
       1)
@@ -3023,7 +3147,8 @@ case $save_final_gawk in
   ;;
   0)
     gawk_dir=/sources/gawk
-    gawk_pkg=$(basename "`ls $gawk_dir | grep gawk*/`" /)
+    gawk_pkg=$(ls $gawk_dir | grep .tar.xz)
+    gawk_pkg=$(basename ${gawk_dir}/$gawk_pkg .tar.xz)
     # Clean up after previous build
     case $opt_one_job in
       1)
@@ -3057,7 +3182,7 @@ case $save_final_gawk in
         rm -f /usr/bin/gawk-*
         make -C ${gawk_dir}/$gawk_pkg -j$(nproc) install
     esac
-    ln -sv /usr/share/man/man1/gawk.1 /usr/share/man/man1/awk.1
+    ln -sv ./gawk.1 /usr/share/man/man1/awk.1
     mkdir -pv                                                           /usr/share/doc/$gawk_pkg
     cp    -v ${gawk_dir}/${gawk_pkg}/doc/{awkforai.txt,*.{eps,pdf,jpg}} /usr/share/doc/$gawk_pkg
     # Save progress
@@ -3080,7 +3205,8 @@ case $save_final_findutils in
   ;;
   0)
     findutils_dir=/sources/findutils
-    findutils_pkg=$(basename "`ls $findutils_dir | grep findutils*/`" /)
+    findutils_pkg=$(ls $findutils_dir | grep .tar.xz)
+    findutils_pkg=$(basename ${findutils_dir}/$findutils_pkg .tar.xz)
     # Clean up after previous build
     case $opt_one_job in
       1)
@@ -3130,7 +3256,8 @@ case $save_final_groff in
   ;;
   0)
     groff_dir=/sources/groff
-    groff_pkg=$(basename "`ls $groff_dir | grep groff*/`" /)
+    groff_pkg=$(ls $groff_dir | grep .tar.gz)
+    groff_pkg=$(basename ${groff_dir}/$groff_pkg .tar.gz)
     groff_papersize_func() {
       read -p "What paper size do you prefer? (letter/a4):" groff_papersize
       if [[ -z "$groff_papersize" ]]; then
@@ -3180,7 +3307,8 @@ case $save_final_grub in
   ;;
   0)
     grub_dir=/sources/grub
-    grub_pkg=$(basename "`ls $grub_dir | grep grub*/`" /)
+    grub_pkg=$(ls $grub_dir | grep .tar.xz)
+    grub_pkg=$(basename ${grub_dir}/$grub_pkg .tar.xz)
     echo -e "${warning}Warning: this GNU GRand Unified Bootloader build will not have EFI support.${default}"
     unset {C,CPP,CXX,LD}FLAGS
     echo depends bli part_gpt > ${grub_dir}/${grub_pkg}/grub-core/extra_deps.lst
@@ -3220,7 +3348,8 @@ case $save_final_gzip in
   ;;
   0)
     gzip_dir=/sources/gzip
-    gzip_pkg=$(basename "`ls $gzip_dir | grep gzip*/`" /)
+    gzip_pkg=$(ls $gzip_dir | grep .tar.xz)
+    gzip_pkg=$(basename ${gzip_dir}/$gzip_pkg .tar.xz)
     pushd ${gzip_dir}/$gzip_pkg
       ${gzip_dir}/$gzip_pkg/configure --prefix=/usr
     popd
@@ -3255,7 +3384,8 @@ case $save_final_iproute2 in
   ;;
   0)
     iproute2_dir=/sources/iproute2
-    iproute2_pkg=$(basename "`ls $iproute2_dir | grep iproute2*/`" /)
+    iproute2_pkg=$(ls $iproute2_dir | grep .tar.xz)
+    iproute2_pkg=$(basename ${iproute2_dir}/$iproute2_pkg .tar.xz)
     sed -i /ARPD/d ${iproute2_dir}/${iproute2_pkg}/Makefile
     rm -fv ${iproute2_dir}/${iproute2_pkg}/man/man8/arpd.8
     sed -i 's/.m_ipt.o//' ${iproute2_dir}/${iproute2_pkg}/tc/Makefile
@@ -3290,7 +3420,8 @@ case $save_final_kbd in
   ;;
   0)
     kbd_dir=/sources/kbd
-    kbd_pkg=$(basename "`ls $kbd_dir | grep kbd*/`" /)
+    kbd_pkg=$(ls $kbd_dir | grep .tar.xz)
+    kbd_pkg=$(basename ${kbd_dir}/$kbd_pkg .tar.xz)
     # Chapter 8.66.1
     pushd ${kbd_dir}/$kbd_pkg
       patch -Np1 -i ${kbd_dir}/${kbd_pkg}/kbd-2.6.4-backspace-1.patch
@@ -3333,7 +3464,8 @@ case $save_final_libpipeline in
   ;;
   0)
     libpipeline_dir=/sources/libpipeline
-    libpipeline_pkg=$(basename "`ls $libpipeline_dir | grep libpipeline*/`" /)
+    libpipeline_pkg=$(ls $libpipeline_dir | grep .tar.gz)
+    libpipeline_pkg=$(basename ${libpipeline_dir}/$libpipeline_pkg .tar.gz)
     pushd ${libpipeline_dir}/$libpipeline_pkg
       ${libpipeline_dir}/${libpipeline_pkg}/configure --prefix=/usr
     popd
@@ -3368,7 +3500,8 @@ case $save_final_make in
   ;;
   0)
     make_dir=/sources/make
-    make_pkg=$(basename "`ls $make_dir | grep make*/`" /)
+    make_pkg=$(ls $make_dir | grep .tar.gz)
+    make_pkg=$(basename ${make_dir}/$make_pkg .tar.gz)
     # Clean up after previous build
     case $opt_one_job in
       1)
@@ -3417,7 +3550,8 @@ case $save_final_patch in
   ;;
   0)
     patch_dir=/sources/patch
-    patch_pkg=$(basename "`ls $patch_dir | grep patch*/`" /)
+    patch_pkg=$(ls $patch_dir | grep .tar.xz)
+    patch_pkg=$(basename ${patch_dir}/$patch_pkg .tar.xz)
     # Clean up after previous build
     case $opt_one_job in
       1)
@@ -3460,7 +3594,8 @@ case $save_final_tar in
   ;;
   0)
     tar_dir=/sources/tar
-    tar_pkg=$(basename "`ls $tar_dir | grep tar*/`" /)
+    tar_pkg=$(ls $tar_dir | grep .tar.xz)
+    tar_pkg=$(basename ${tar_dir}/$tar_pkg .tar.xz)
     # Clean up after previous build
     case $opt_one_job in
       1)
@@ -3506,7 +3641,8 @@ case $save_final_texinfo in
   ;;
   0)
     texinfo_dir=/sources/texinfo
-    texinfo_pkg=$(basename "`ls $texinfo_dir | grep texinfo*/`" /)
+    texinfo_pkg=$(ls $texinfo_dir | grep .tar.xz)
+    texinfo_pkg=$(basename ${texinfo_dir}/$texinfo_pkg .tar.xz)
     # Clean up after previous build
     case $opt_one_job in
       1)
@@ -3551,7 +3687,7 @@ case $save_final_vim in
   ;;
   0)
     vim_dir=/sources/vim
-    vim_pkg=$(basename "`ls $vim_dir | grep vim*/`" /)
+    vim_pkg=vim90
     echo '#define SYS_VIMRC_FILE "/etc/vimrc"' >> ${vim_dir}/${vim_pkg}/src/feature.h
     pushd ${vim_dir}/$vim_pkg
       ${vim_dir}/${vim_pkg}/configure --prefix=/usr
@@ -3575,11 +3711,11 @@ case $save_final_vim in
         popd
         make -C ${vim_dir}/$vim_pkg -j$(nproc) install
     esac
-    ln -sv /usr/bin/vim /usr/bin/vi
+    ln -sv ./vim /usr/bin/vi
     for L in /usr/share/man/{,*/}man1/vim.1; do
-      ln -sv $(dirname $L)/vim.1 $(dirname $L)/vi.1
+      ln -sv ./vim.1 $(dirname $L)/vi.1
     done
-    ln -sv /usr/share/vim/vim91/doc /usr/share/doc/$vim_pkg
+    ln -sv ../vim/vim91/doc /usr/share/doc/$vim_pkg
     cat > /etc/vimrc << "EOF"
 " Begin /etc/vimrc
 
@@ -3617,7 +3753,8 @@ case $save_final_markupsafe in
   ;;
   0)
     markupsafe_dir=/sources/MarkupSafe
-    markupsafe_pkg=$(basename "`ls $markupsafe_dir | grep MarkupSafe*/`" /)
+    markupsafe_pkg=$(ls $markupsafe_dir | grep .tar.gz)
+    markupsafe_pkg=$(basename ${markupsafe_dir}/$markupsafe_pkg .tar.gz)
     pushd ${markupsafe_dir}/$markupsafe_pkg
       pip3 wheel -w dist --no-cache-dir --no-build-isolation --no-deps ${markupsafe_dir}/$markupsafe_pkg
       pip3 install --no-index --no-user --find-links ${markupsafe_dir}/${markupsafe_pkg}/dist Markupsafe
@@ -3642,7 +3779,8 @@ case $save_final_jinja2 in
   ;;
   0)
     jinja2_dir=/sources/jinja2
-    jinja2_pkg=$(basename "`ls $jinja2_dir | grep Jinja2*/`" /)
+    jinja2_pkg=$(ls $jinja2_dir | grep .tar.gz)
+    jinja2_pkg=$(basename ${jinja2_dir}/$jinja2_pkg .tar.gz)
     pushd ${jinja2_dir}/$jinja2_pkg
       pip3 wheel -w dist --no-cache-dir --no-build-isolation --no-deps ${jinja2_dir}/$jinja2_pkg
       pip3 install --no-index --no-user --find-links ${jinja2_dir}/${jinja2_pkg}/dist Jinja2
@@ -3667,7 +3805,8 @@ case $save_final_udev in
   ;;
   0)
     systemd_dir=/sources/systemd
-    systemd_pkg=$(basename "`ls $systemd_dir | grep systemd*/`" /)
+    systemd_pkg=$(ls $systemd_dir | grep .tar.gz)
+    systemd_pkg=$(basename ${systemd_dir}/$systemd_pkg .tar.gz)
     sed -i -e 's/GROUP="render"/GROUP="video"/' \
            -e 's/GROUP="sgx", //'          ${systemd_dir}/${systemd_pkg}/rules.d/50-udev-default.rules.in
     sed '/systemd-sysctl/s/^/#/'        -i ${systemd_dir}/${systemd_pkg}/rules.d/99-systemd.rules.in
@@ -3736,7 +3875,8 @@ case $save_final_man_db in
   ;;
   0)
     man_db_dir=/sources/man-db
-    man_db_pkg=$(basename "`ls $man_db_dir | grep man-db*/`" /)
+    man_db_pkg=$(ls $man_db_dir | grep .tar.xz)
+    man_db_pkg=$(basename ${man_db_dir}/$man_db_pkg .tar.xz)
     pushd ${man_db_dir}/$man_db_pkg
       ${man_db_dir}/${man_db_pkg}/configure --prefix=/usr                         \
                                             --docdir=/usr/share/doc/$man_db_pkg   \
@@ -3780,7 +3920,8 @@ case $save_final_procps_ng in
   ;;
   0)
     procps_ng_dir=/sources/procps-ng
-    procps_ng_pkg=$(basename "`ls $procps_ng_dir | grep procps-ng*/`" /)
+    procps_ng_pkg=$(ls $procps_ng_dir | grep .tar.xz)
+    procps_ng_pkg=$(basename ${procps_ng_dir}/$procps_ng_pkg .tar.xz)
     pushd ${procps_ng_dir}/$procps_ng_pkg
       ${procps_ng_dir}/${procps_ng_pkg}/configure --prefix=/usr                           \
                                                   --docdir=/usr/share/doc/$procps_ng_pkg  \
@@ -3818,7 +3959,8 @@ case $save_final_util_linux in
   ;;
   0)
     util_linux_dir=/sources/util-linux
-    util_linux_pkg=$(basename "`ls $util_linux_dir | grep util-linux*/`" /)
+    util_linux_pkg=$(ls $util_linux_dir | grep .tar.xz)
+    util_linux_pkg=$(basename ${util_linux_dir}/$util_linux_pkg .tar.xz)
     # Clean up after previous build
     case $opt_one_job in
       1)
@@ -3884,7 +4026,8 @@ case $save_final_e2fsprogs in
   ;;
   0)
     e2fsprogs_dir=/sources/e2fsprogs
-    e2fsprogs_pkg=$(basename "`ls $e2fsprogs_dir | grep e2fsprogs*/`" /)
+    e2fsprogs_pkg=$(ls $e2fsprogs_dir | grep .tar.gz)
+    e2fsprogs_pkg=$(basename ${e2fsprogs_dir}/$e2fsprogs_pkg .tar.gz)
     mkdir -v ${e2fsprogs_dir}/${e2fsprogs_pkg}/build
     pushd ${e2fsprogs_dir}/${e2fsprogs_pkg}/build
       ${e2fsprogs_dir}/${e2fsprogs_pkg}/configure --prefix=/usr           \
@@ -3935,7 +4078,8 @@ case $save_final_sysklogd in
   ;;
   0)
     sysklogd_dir=/sources/sysklogd
-    sysklogd_pkg=$(basename "`ls $sysklogd_dir | grep sysklogd*/`" /)
+    sysklogd_pkg=$(ls $sysklogd_dir | grep .tar.gz)
+    sysklogd_pkg=$(basename ${sysklogd_dir}/$sysklogd_pkg .tar.gz)
     sed -i '/Error loading kernel symbols/{n;n;d}' ${sysklogd_dir}/${sysklogd_pkg}/ksym_mod.c
     sed -i 's/union wait/int/'                     ${sysklogd_dir}/${sysklogd_pkg}/syslogd.c
     case $opt_one_job in
@@ -3977,7 +4121,8 @@ case $save_final_sysvinit in
   ;;
   0)
     sysvinit_dir=/sources/sysvinit
-    sysvinit_pkg=$(basename "`ls $sysvinit_dir | grep sysvinit*/`" /)
+    sysvinit_pkg=$(ls $sysvinit_dir | grep .tar.xz)
+    sysvinit_pkg=$(basename ${sysvinit_dir}/$sysvinit_pkg .tar.xz)
     pushd ${sysvinit_dir}/$sysvinit_pkg
       patch -Np1 -i ${sysvinit_dir}/${sysvinit_pkg}/sysvinit-3.08-consolidated-1.patch
     popd
@@ -4033,7 +4178,8 @@ case $save_final_lfs_bootscripts in
   ;;
   0)
     lfs_bootscripts_dir=/sources/lfs-bootscripts
-    lfs_bootscripts_pkg=$(basename "`ls $lfs_bootscripts_dir | grep lfs-bootscripts*/`" /)
+    lfs_bootscripts_pkg=$(ls $lfs_bootscripts_dir | grep .tar.xz)
+    lfs_bootscripts_pkg=$(basename ${lfs_bootscripts_dir}/$lfs_bootscripts_pkg .tar.xz)
     case $opt_one_job in
       1)
         make -C ${lfs_bootscripts_dir}/$lfs_bootscripts_pkg install
@@ -4256,14 +4402,17 @@ case $save_final_linux in
   ;;
   0)
     linux_dir=/sources/linux
-    linux_pkg=$(basename "`ls $linux_dir | grep linux*/`" /)
+    linux_pkg=$(ls $linux_dir | grep .tar.xz)
+    linux_pkg=$(basename ${linux_dir}/$linux_pkg .tar.xz)
     case $opt_one_job in
       1)
         make -C ${linux_dir}/$linux_pkg mrproper
+        echo -e "${info}Creating configuration file...${default}"
         make -C ${linux_dir}/$linux_pkg defconfig
       ;;
       *)
         make -C ${linux_dir}/$linux_pkg -j$(nproc) mrproper
+        echo -e "${info}Creating configuration file...${default}"
         make -C ${linux_dir}/$linux_pkg -j$(nproc) defconfig
     esac
     # Edit features (and their dependencies) required by LFS
@@ -4342,7 +4491,8 @@ case $save_final_boot in
   0)
     # For identifying Linux version
     linux_dir=/sources/linux
-    linux_pkg=$(basename "`ls $linux_dir | grep linux*/`" /)
+    linux_pkg=$(ls $linux_dir | grep .tar.xz)
+    linux_pkg=$(basename ${linux_dir}/$linux_pkg .tar.xz)
     grub-install ${savedevice}3
     echo -e "${info}Creating /boot/grub/grub.cfg...${default}"
     echo 'set default=0'                                                                >  /boot/grub/grub.cfg
@@ -4369,12 +4519,6 @@ if [[ -z "$save_final_finish" ]]; then
 fi
 case $save_final_finish in
   1)
-    echo -e "${info}You would like to log out of the chroot environment, power off,"
-    echo -e "remove the installation image, and boot the Linux From Scratch system now.${default}"
-    echo    "Issue the following to power off the installation image:"
-    echo    "logout"
-    echo -e "systemctl poweroff${default}"
-    exit 0
   ;;
   0)
     echo -e "${info}Creating /etc/lfs-release...${default}"
@@ -4416,13 +4560,6 @@ case $save_final_finish in
       echo    "Issue the following to power off the installation image:"
       echo    "logout"
       echo -e "systemctl poweroff${default}"
-      exit 0
-    else
-      echo -e "${info}You would like to remove lfs-install remains from the system."
-      echo    "Issue the following to do so:"
-      echo    "rm -v /usr/bin/lfs-install-chroot"
-      echo    "If you also want to remove the lfs-install license:"
-      echo -e "rm -vr /usr/share/doc/lfs-install${default}"
       exit 0
     fi
   ;;

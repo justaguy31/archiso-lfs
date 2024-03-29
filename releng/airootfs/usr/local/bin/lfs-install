@@ -33,12 +33,6 @@ eval set -- "$args"
 while true; do
   case "$1" in
 # -d <var> --debug <var>
-# a - print everything
-# b - only print current stage of installation
-# v - print which scripts and Makefile recipes were invoked and when they exited
-# j - print which sub-commands were invoked and when they exited
-# p - print which directories were invoked
-# n - print no debugging information
   -d|--debug)
     case "$2" in
       xv)
@@ -56,6 +50,7 @@ while true; do
       n)
         set +vx
     esac
+    opt_debug="$2"
     shift 2;;
 
 # -h --help
@@ -198,34 +193,17 @@ if [ -f $opt_save_file ] && [[ ! -z "$opt_save_file" ]]; then
   fi
   case $save_chroot in
     1)
-      echo -e "${info}Entering chroot environment..."
-      echo -e "You can always exit it by running 'exit' in the chroot shell."
-      # A pretty huge chunk of code to decide which options should be passed to lfs-install-chroot
-      chroot_options=""
-      if [[ -z "$opt_debug" ]]; then
-        chroot_options="$chroot_options -d $opt_debug"
-      fi
-      case $opt_full_save in
-        1)
-          chroot_options="$chroot_options -f"
-      esac
-      case $opt_one_job in
-        1)
-          chroot_options="$chroot_options -j"
-      esac
-      case $opt_keep_going in
-        1)
-          chroot_options="$chroot_options -k"
-      esac
-      if [[ -z "$opt_save_file" ]]; then
-        chroot_options="$chroot_options -s ${opt_save_file#$savelocation}"
-      fi
-      chroot "$savelocation" /usr/bin/env -i             \
-                             HOME=/root                  \
-                             TERM="$TERM"                \
-                             PS1='(lfs chroot) \u:\w\$ ' \
-                             PATH=/usr/bin:/usr/sbin     \
-                             /bin/bash --login /usr/bin/lfs-install-chroot $chroot_options
+      echo -e "${info}Entering chroot environment...${default}"
+      chroot "$savelocation" /usr/bin/env -i                              \
+                             HOME=/root                                   \
+                             TERM="$TERM"                                 \
+                             PS1='(lfs chroot) \u:\w\$ '                  \
+                             PATH=/usr/bin:/usr/sbin                      \
+                             opt_debug=$opt_debug                         \
+                             opt_one_job=$opt_one_job                     \
+                             opt_keep_going=$opt_keep_going               \
+                             opt_save_file=${opt_save_file#$savelocation} \
+                             /bin/bash --login /usr/bin/lfs-install-chroot
     ;;
     0)
     ;;
@@ -282,8 +260,14 @@ case $save_partitions in
         fi
         case $umountbusydevice in
           [Yy])
-            umount   -v ${parteddevice}?* || true
-            swapoff  -v ${parteddevice}?* || true
+            umount      ${savelocation}/dev/pts || true
+            umount      ${savelocation}/dev/shm || true
+            umount      ${savelocation}/dev     || true
+            umount      ${savelocation}/proc    || true
+            umount      ${savelocation}/sys     || true
+            umount      ${savelocation}/run     || true
+            umount   -v ${parteddevice}?*       || true
+            swapoff  -v ${parteddevice}?*       || true
           ;;
           [Nn])
             exit 1
@@ -497,13 +481,16 @@ case $save_created in
       touch $fullsavename
     fi
     # Saving the progress in the save file
+    savedevice=$parteddevice
     echo "`sed '/save_partitions/d' $fullsavename`" > $fullsavename
     echo "`sed '/save_created/d'    $fullsavename`" > $fullsavename
     echo "`sed '/savedevice/d'      $fullsavename`" > $fullsavename
     echo "`sed '/savelocation/d'    $fullsavename`" > $fullsavename
     echo -e "savedevice=$parteddevice\nsavelocation=`realpath $savelocation`\nsave_partitions=1\nsave_created=1\n" >> $fullsavename # write certain variables to save file
     echo -e "${success}Save file successfully created.${default}"
-    echo -e "${info}You can run 'lfs-install -s ${fullsavename}' next time to continue where you stopped.${default}"
+    echo -e "${info}You can run the following next time to continue where you stopped:${default}"
+    echo    "mount ${savedevice}2 ${savelocation}"
+    echo    "lfs-install -s $(realpath $savelocation)/${savefilename}.sh"
     read -p "Press enter to continue."
   ;;
   *)
@@ -523,7 +510,9 @@ case $save_build_preparation in
     # Chapter 4
     mkdir -pv ${savelocation}/{etc,var} ${savelocation}/usr/{bin,lib,sbin}
     for i in bin lib sbin; do
-      ln -sv ${savelocation}/usr/$i ${savelocation}/$i
+      # The first argument of `ln' is the path the link will store, and the second argument is the file (link) that will be created
+      # Relative symlinks are preffered over absolute (full path specified) ones
+      ln -sv ./usr/$i ${savelocation}/$i
     done
     case $(uname -m) in
       x86_64)
@@ -951,11 +940,11 @@ case $save_target_glibc in
     # Chapter 5.5.1
     case $(uname -m) in
       i?86)
-        ln -sfv ${savelocation}/lib/ld-linux.so.2 ${savelocation}/lib/ld-lsb.so.3
+        ln -sfv ./ld-linux.so.2 ${savelocation}/lib/ld-lsb.so.3
       ;;
       x86_64)
-        ln -sfv ${savelocation}/lib/ld-linux-x86-64.so.2 ${savelocation}/lib64/ld-linux-x86-64.so.2
-        ln -sfv ${savelocation}/lib/ld-linux-x86-64.so.2 ${savelocation}/lib64/ld-lsb-x86-64.so.3
+        ln -sfv ../lib/ld-linux-x86-64.so.2   ${savelocation}/lib64/ld-linux-x86-64.so.2
+        ln -sfv ../lib/ld-linux-x86-64.so.2   ${savelocation}/lib64/ld-lsb-x86-64.so.3
       ;;
     esac
     pushd ${glibc_dir}/${glibc_pkg}
@@ -1185,8 +1174,7 @@ case $save_temp_ncurses in
              DESTDIR=${savelocation}                     \
              TIC_PATH=${ncurses_dir}/${ncurses_pkg}/tic/progs/tic install
     esac
-    ln -svf ${savelocation}/lib/libncursesw.so \
-           ${savelocation}/usr/lib/libncurses.so
+    ln -svf ./libncursesw.so ${savelocation}/usr/lib/libncurses.so
     sed -e 's/^#if.*XOPEN.*$/#if 1/' \
         -i ${savelocation}/usr/include/curses.h
     # Save progress
@@ -1256,7 +1244,7 @@ case $save_temp_bash in
         make -C ${bash_dir}/${bash_pkg} -j$(nproc) DESTDIR=${savelocation} install
     esac
     # Chapter 6.4.1
-    ln -sv ${bash_dir}/${bash_pkg}/bash ${savelocation}/bin/sh
+    ln -sv ./bash ${savelocation}/bin/sh
     # Save progress
     echo "`sed '/save_temp_bash/d'  $fullsavename`" > $fullsavename
     echo -e "save_temp_bash=1\n" >> $fullsavename
@@ -2312,7 +2300,7 @@ case $save_temp_gcc in
         make -C ${gcc_dir}/${gcc_pkg} -j$(nproc)
         make -C ${gcc_dir}/${gcc_pkg} -j$(nproc) DESTDIR=${savelocation} install
     esac
-    ln -sv ${gcc_dir}/${gcc_pkg}/gcc ${savelocation}/usr/bin/cc
+    ln -sv ./gcc ${savelocation}/usr/bin/cc
     # Save progress
     echo "`sed '/save_temp_gcc/d'  $fullsavename`" > $fullsavename
     echo -e "save_temp_gcc=1\n" >> $fullsavename
@@ -2799,7 +2787,7 @@ case $save_download_final in
       }
       zstd_invalid_func
     fi
-    cd $zlib_dir
+    cd $zstd_dir
     echo -e "${info}Extracting zstd-${zstd_ver}.tar.gz contents...${default}"
     tar -xf ${zstd_dir}/zstd-${zstd_ver}.tar.gz
     cd $OLDPWD
@@ -2905,7 +2893,7 @@ case $save_download_final in
     flex_latest=${flex_latest#flex }
     flex_latest=${flex_latest%'<'}
     flex_ver=${flex_latest#v}
-    curl ${flex_repo}/download/${flex_latest}/flex-${flex_ver}.tar.gz --output ${flex_dir}/flex-${flex_ver}.tar.gz
+    curl --location ${flex_repo}/download/v${flex_latest}/flex-${flex_ver}.tar.gz --output ${flex_dir}/flex-${flex_ver}.tar.gz
     checksum=`sha512sum ${flex_dir}/flex-${flex_ver}.tar.gz | awk '{print $1}'`
     if [ "$checksum" != "`cat /etc/lfs-install/flex.sha512`" ]; then
       echo -e "${warning}Warning: the SHA-512 checksum of flex-${flex_ver}.tar.gz does not match the trusted one."
@@ -3073,7 +3061,7 @@ case $save_download_final in
     mkdir -pv $attr_dir
     attr_repo="https://download.savannah.gnu.org/releases/attr/"
     attr_latest=$(curl -s "${attr_repo}" | grep -Eo '(attr-[0-9]+([.][0-9]*)*)+.tar.xz' | sort -V | tail -1)
-    curl ${attr_repo}/$attr_latest --output ${attr_dir}/${attr_latest}
+    curl --location ${attr_repo}/$attr_latest --output ${attr_dir}/${attr_latest}
     checksum=`sha512sum ${attr_dir}/${attr_latest} | awk '{print $1}'`
     if [ "$checksum" != "`cat /etc/lfs-install/attr.sha512`" ]; then
       echo -e "${warning}Warning: the SHA-512 checksum of $attr_latest does not match the trusted one."
@@ -3106,7 +3094,7 @@ case $save_download_final in
     mkdir -pv $acl_dir
     acl_repo="https://download.savannah.gnu.org/releases/acl/"
     acl_latest=$(curl -s "${acl_repo}" | grep -Eo '(acl-[0-9]+([.][0-9]*)*)+.tar.xz' | sort -V | tail -1)
-    curl ${acl_repo}/$acl_latest --output ${acl_dir}/${acl_latest}
+    curl --location ${acl_repo}/$acl_latest --output ${acl_dir}/${acl_latest}
     checksum=`sha512sum ${acl_dir}/${acl_latest} | awk '{print $1}'`
     if [ "$checksum" != "`cat /etc/lfs-install/acl.sha512`" ]; then
       echo -e "${warning}Warning: the SHA-512 checksum of $acl_latest does not match the trusted one."
@@ -3170,10 +3158,11 @@ case $save_download_final in
     # Libxcrypt, a modern library for one-way hashing of passwords
     libxcrypt_dir=${savelocation}/sources/libxcrypt
     mkdir -pv $libxcrypt_dir
-    libxcrypt_repo="https://github.com/besser82/libxcrypt/releases"
-    libxcrypt_latest=$(curl -s "${libxcrypt_repo}" | grep -Eo 'v([0-9]+([.][0-9]*)*)+' | sort -V | tail -1)
+    libxcrypt_repo="https://github.com/besser82/libxcrypt"
+    libxcrypt_latest=$(curl -s "${libxcrypt_repo}/tags/" | grep -Eo "v(4([.][0-9]*)*)+\." | sort -V | tail -1)
+    libxcrypt_latest=${libxcrypt_latest%'.'}
     libxcrypt_ver=${libxcrypt_latest#v}
-    curl ${libxcrypt_repo}/download/${libxcrypt_latest}/libxcrypt-${libxcrypt_ver}.tar.xz --output ${libxcrypt_dir}/libxcrypt-${libxcrypt_ver}.tar.xz
+    curl --location ${libxcrypt_repo}/releases/download/${libxcrypt_latest}/libxcrypt-${libxcrypt_ver}.tar.xz --output ${libxcrypt_dir}/libxcrypt-${libxcrypt_ver}.tar.xz
     libxcrypt_latest=libxcrypt-${libxcrypt_ver}.tar.xz
     checksum=`sha512sum ${libxcrypt_dir}/${libxcrypt_latest} | awk '{print $1}'`
     if [ "$checksum" != "`cat /etc/lfs-install/libxcrypt.sha512`" ]; then
@@ -3205,11 +3194,10 @@ case $save_download_final in
     # Shadow, programs for handling passwords in a secure way
     shadow_dir=${savelocation}/sources/shadow
     mkdir -pv $shadow_dir
-    shadow_repo="https://github.com/shadow-maint/shadow/releases/"
-    shadow_latest=$(curl -s "${shadow_repo}" | grep -Eo '([0-9]+([.][0-9]*)*)+:' | sort -V | tail -1)
-    shadow_latest=${shadow_latest%':'}
-    curl ${shadow_repo}/download/${shadow_latest}/shadow-${shadow_latest}.tar.xz --output ${shadow_dir}/shadow-${shadow_latest}.tar.xz
-    shadow_latest=shadow-${shadow_latest}.tar.xz
+    # The latest version is lower than the previous one in all of a sudden
+    shadow_repo="https://github.com/shadow-maint/shadow/releases/download/4.14.5/shadow-4.14.5.tar.xz"
+    shadow_latest=shadow-4.14.5.tar.xz
+    curl --location $shadow_repo --output ${shadow_dir}/${shadow_latest}
     checksum=`sha512sum ${shadow_dir}/${shadow_latest} | awk '{print $1}'`
     if [ "$checksum" != "`cat /etc/lfs-install/shadow.sha512`" ]; then
       echo -e "${warning}Warning: the SHA-512 checksum of $shadow_latest does not match the trusted one."
@@ -3242,10 +3230,11 @@ case $save_download_final in
     mkdir -pv $psmisc_dir
     # Linux From Scratch doesn't offer the latest version,
     # but I'm still paying huge respect to Psmisc SourceForge repository maintainer(s) for comfortable file organization,
-    # as version checking will be very useful for updating LinuxHome repository.
+    # as grep'ping the site would be much easier
+    # when checking for latest version
     psmisc_repo="https://sourceforge.net/projects/psmisc/files/psmisc/psmisc-23.6.tar.xz"
     psmisc_latest=psmisc-23.6
-    curl --location ${psmisc_repo} --output ${pscmisc_dir}/${psmisc_latest}.tar.xz
+    curl --location ${psmisc_repo} --output ${psmisc_dir}/${psmisc_latest}.tar.xz
     checksum=`sha512sum ${psmisc_dir}/${psmisc_latest}.tar.xz | awk '{print $1}'`
     if [ "$checksum" != "`cat /etc/lfs-install/psmisc.sha512`" ]; then
       echo -e "${warning}Warning: the SHA-512 checksum of $psmisc_latest.tar.xz does not match the trusted one."
@@ -3275,8 +3264,9 @@ case $save_download_final in
     cd $OLDPWD
 
     # GNU Bash shell LFS patch
-    bash_dir=/sources/bash
-    bash_pkg=$(basename "`ls $bash_dir | grep bash*/`" /)
+    bash_dir=${savelocation}/sources/bash
+    bash_latest=$(ls $bash_dir | grep .tar.gz)
+    bash_pkg=$(basename "${bash_dir}/$bash_latest" .tar.gz)
     bash_patch_repo=https://www.linuxfromscratch.org/patches/lfs/12.1/bash-5.2.21-upstream_fixes-1.patch
     curl $bash_patch_repo --output ${bash_dir}/${bash_pkg}/bash-5.2.21-upstream_fixes-1.patch
     checksum=`sha512sum ${bash_dir}/${bash_pkg}/bash-5.2.21-upstream_fixes-1.patch | awk '{print $1}'`
@@ -3303,7 +3293,7 @@ case $save_download_final in
       bash_patch_invalid_func
     fi
 
-    # GNU Libtool generic library support script
+    # GNU Libtool, a generic library support script
     libtool_dir=${savelocation}/sources/libtool
     mkdir -pv $libtool_dir
     libtool_repo="https://ftp.gnu.org/gnu/libtool/"
@@ -3321,7 +3311,7 @@ case $save_download_final in
         fi
         case $libtool_invalid in
           [Yy])
-            echo -e "${warning}Keeping unstable (or unsafe) GNU Libtool generic library support script.${default}"
+            echo -e "${warning}Keeping unstable (or unsafe) GNU Libtool, a generic library support script.${default}"
           ;;
           [Nn])
             exit 1
@@ -3542,8 +3532,8 @@ case $save_download_final in
     intltool_dir=${savelocation}/sources/intltool
     mkdir -pv $intltool_dir
     intltool_repo="https://launchpad.net/intltool/trunk/"
-    intltool_latest=$(curl -s "${intltool_repo}" | grep -Eo "Latest version is" | awk '{print $4}')
-    curl "${intltool_repo}/${intltool_latest}/+download/intltool-${intltool_latest}.tar.gz" --output ${intltool_dir}/intltool-${intltool_latest}.tar.gz
+    intltool_latest=$(curl -s "${intltool_repo}" | grep "Latest version is" | awk '{print $4}')
+    curl --location "${intltool_repo}/${intltool_latest}/+download/intltool-${intltool_latest}.tar.gz" --output ${intltool_dir}/intltool-${intltool_latest}.tar.gz
     intltool_latest=intltool-${intltool_latest}.tar.gz
     checksum=`sha512sum ${intltool_dir}/${intltool_latest} | awk '{print $1}'`
     if [ "$checksum" != "`cat /etc/lfs-install/intltool.sha512`" ]; then
@@ -3745,7 +3735,7 @@ case $save_download_final in
     # And another fixed version
     libffi_repo="https://github.com/libffi/libffi/releases/download/v3.4.4/libffi-3.4.4.tar.gz"
     libffi_latest=libffi-3.4.4.tar.gz
-    curl ${libffi_repo} --output ${libffi_dir}/${libffi_latest}
+    curl --location ${libffi_repo} --output ${libffi_dir}/${libffi_latest}
     checksum=`sha512sum ${libffi_dir}/${libffi_latest} | awk '{print $1}'`
     if [ "$checksum" != "`cat /etc/lfs-install/libffi.sha512`" ]; then
       echo -e "${warning}Warning: the SHA-512 checksum of $libffi_latest does not match the trusted one."
@@ -3779,7 +3769,7 @@ case $save_download_final in
     # No releases on GitHub, and 'https://pypi.org/project/flit-core/#history' doesn't provide an efficient way of version naming
     flit_core_repo="https://pypi.org/packages/source/f/flit-core/flit_core-3.9.0.tar.gz"
     flit_core_latest=flit_core-3.9.0.tar.gz
-    curl ${flit_core_repo} --output ${flit_core_dir}/${flit_core_latest}
+    curl --location ${flit_core_repo} --output ${flit_core_dir}/${flit_core_latest}
     checksum=`sha512sum ${flit_core_dir}/${flit_core_latest} | awk '{print $1}'`
     if [ "$checksum" != "`cat /etc/lfs-install/flit-core.sha512`" ]; then
       echo -e "${warning}Warning: the SHA-512 checksum of $flit_core_latest does not match the trusted one."
@@ -3847,7 +3837,7 @@ case $save_download_final in
     # Another fixed version
     setuptools_repo="https://pypi.org/packages/source/s/setuptools/setuptools-69.1.0.tar.gz"
     setuptools_latest=setuptools-69.1.0.tar.gz
-    curl ${wheel_repo} --output ${setuptools_dir}/${setuptools_latest}
+    curl --location ${setuptools_repo} --output ${setuptools_dir}/${setuptools_latest}
     checksum=`sha512sum ${setuptools_dir}/${setuptools_latest} | awk '{print $1}'`
     if [ "$checksum" != "`cat /etc/lfs-install/setuptools.sha512`" ]; then
       echo -e "${warning}Warning: the SHA-512 checksum of $setuptools_latest does not match the trusted one."
@@ -3880,7 +3870,7 @@ case $save_download_final in
     mkdir -pv $ninja_dir
     ninja_repo="https://files.pythonhosted.org/packages/37/2c/d717d13a413d6f7579cdaa1e28e6e2c98de95461549b08d311c8a5bf4c51/ninja-1.11.1.1.tar.gz"
     ninja_latest=ninja-1.11.1.tar.gz
-    curl ${ninja_repo} --output ${ninja_dir}/${ninja_latest}
+    curl --location ${ninja_repo} --output ${ninja_dir}/${ninja_latest}
     checksum=`sha512sum ${ninja_dir}/${ninja_latest} | awk '{print $1}'`
     if [ "$checksum" != "`cat /etc/lfs-install/ninja.sha512`" ]; then
       echo -e "${warning}Warning: the SHA-512 checksum of $ninja_latest does not match the trusted one."
@@ -3914,7 +3904,7 @@ case $save_download_final in
     # Fixed version
     meson_repo="https://github.com/mesonbuild/meson/releases/download/1.3.2/meson-1.3.2.tar.gz"
     meson_latest=meson-1.3.2.tar.gz
-    curl ${meson_repo} --output ${meson_dir}/${meson_latest}
+    curl --location ${meson_repo} --output ${meson_dir}/${meson_latest}
     checksum=`sha512sum ${meson_dir}/${meson_latest} | awk '{print $1}'`
     if [ "$checksum" != "`cat /etc/lfs-install/meson.sha512`" ]; then
       echo -e "${warning}Warning: the SHA-512 checksum of $meson_latest does not match the trusted one."
@@ -3943,8 +3933,9 @@ case $save_download_final in
     tar -xf ${meson_dir}/${meson_latest}
     cd $OLDPWD
     # Coreutils internationalization fixes LFS patch
-    coreutils_dir=/sources/coreutils
-    coreutils_pkg=$(basename "`ls $coreutils_dir | grep coreutils*/`" /)
+    coreutils_dir=${savelocation}/sources/coreutils
+    coreutils_latest=$(ls $coreutils_dir | grep coreutils.*\.tar\.xz)
+    coreutils_pkg=$(basename "${coreutils_dir}/$coreutils_latest" .tar.xz)
     coreutils_patch_repo="https://www.linuxfromscratch.org/patches/lfs/12.1/coreutils-9.4-i18n-1.patch"
     curl ${coreutils_patch_repo} --output ${coreutils_dir}/${coreutils_pkg}/coreutils-9.4-i18n-1.patch
     checksum=`sha512sum ${coreutils_dir}/${coreutils_pkg}/coreutils-9.4-i18n-1.patch | awk '{print $1}'`
@@ -3977,7 +3968,7 @@ case $save_download_final in
     check_repo="https://github.com/libcheck/check/releases"
     check_latest=$(curl -s "${check_repo}" | grep -Eo 'Check ([0-9]+([.][0-9]*)*)+' | sort -V | tail -1)
     check_latest="${check_latest#Check }"
-    curl ${check_repo}/download/${check_latest}/check-${check_latest}.tar.gz --output ${check_dir}/check-${check_latest}.tar.gz
+    curl --location ${check_repo}/download/${check_latest}/check-${check_latest}.tar.gz --output ${check_dir}/check-${check_latest}.tar.gz
     check_latest=check-${check_latest}.tar.gz
     checksum=`sha512sum ${check_dir}/${check_latest} | awk '{print $1}'`
     if [ "$checksum" != "`cat /etc/lfs-install/check.sha512`" ]; then
@@ -4140,8 +4131,8 @@ case $save_download_final in
     cd $OLDPWD
     # Kbd Backspace/Delete Fix LFS patch
     kbd_patch_repo="https://www.linuxfromscratch.org/patches/lfs/12.1/kbd-2.6.4-backspace-1.patch"
-    kbd_patch_dir=$(basename "`ls $kbd_dir | grep kbd*/`" /)
-    curl $kbd_patch_repo --output ${kbd_dir}/${kdb_patch_dir}/kbd-2.6.4-backspace-1.patch
+    kbd_patch_dir=$(basename "${kbd_dir}/$kbd_latest")
+    curl $kbd_patch_repo --output ${kbd_dir}/${kbd_patch_dir}/kbd-2.6.4-backspace-1.patch
     checksum=`sha512sum ${kbd_dir}/${kbd_patch_dir}/kbd-2.6.4-backspace-1.patch | awk '{print $1}'`
     if [ "$checksum" != "`cat /etc/lfs-install/kbd-patch.sha512`" ]; then
       echo -e "${warning}Warning: the SHA-512 checksum of kbd-2.6.4-backspace-1.patch does not match the trusted one."
@@ -4170,7 +4161,7 @@ case $save_download_final in
     mkdir -pv $libpipeline_dir
     libpipeline_repo="https://download.savannah.gnu.org/releases/libpipeline/"
     libpipeline_latest=$(curl -s "${libpipeline_repo}" | grep -Eo '(libpipeline-[0-9]+([.][0-9]*)*)+.tar.gz' | sort -V | tail -1)
-    curl ${libpipeline_repo}/$libpipeline_latest --output ${libpipeline_dir}/${libpipeline_latest}
+    curl --location ${libpipeline_repo}/$libpipeline_latest --output ${libpipeline_dir}/${libpipeline_latest}
     checksum=`sha512sum ${libpipeline_dir}/${libpipeline_latest} | awk '{print $1}'`
     if [ "$checksum" != "`cat /etc/lfs-install/libpipeline.sha512`" ]; then
       echo -e "${warning}Warning: the SHA-512 checksum of $libpipeline_latest does not match the trusted one."
@@ -4235,10 +4226,9 @@ case $save_download_final in
     # MarkupSafe, an implementation of XML/HTML/XHTML Markup safe string
     markupsafe_dir=${savelocation}/sources/MarkupSafe
     mkdir -pv $markupsafe_dir
-    # Untrusted extension: 'whl', no time to test
     markupsafe_repo="https://pypi.org/packages/source/M/MarkupSafe/MarkupSafe-2.1.5.tar.gz"
     markupsafe_latest=MarkupSafe-2.1.5.tar.gz
-    curl ${markupsafe_repo} --output ${markupsafe_dir}/${markupsafe_latest}
+    curl --location ${markupsafe_repo} --output ${markupsafe_dir}/${markupsafe_latest}
     checksum=`sha512sum ${markupsafe_dir}/${markupsafe_latest} | awk '{print $1}'`
     if [ "$checksum" != "`cat /etc/lfs-install/markupsafe.sha512`" ]; then
       echo -e "${warning}Warning: the SHA-512 checksum of $markupsafe_latest does not match the trusted one."
@@ -4272,7 +4262,7 @@ case $save_download_final in
     # There's only a version (X.X.X) in the release names
     jinja2_repo="https://pypi.org/packages/source/J/Jinja2/Jinja2-3.1.3.tar.gz"
     jinja2_latest=Jinja2-3.1.3.tar.gz
-    curl ${jinja2_repo} --output ${jinja2_dir}/${jinja2_latest}
+    curl --location ${jinja2_repo} --output ${jinja2_dir}/${jinja2_latest}
     checksum=`sha512sum ${jinja2_dir}/${jinja2_latest} | awk '{print $1}'`
     if [ "$checksum" != "`cat /etc/lfs-install/jinja2.sha512`" ]; then
       echo -e "${warning}Warning: the SHA-512 checksum of $jinja2_latest does not match the trusted one."
@@ -4303,8 +4293,8 @@ case $save_download_final in
     # Systemd (only Udev will be installed)
     systemd_dir=${savelocation}/sources/systemd
     mkdir -pv $systemd_dir
-    systemd_repo="https://github.com/systemd/systemd/releases"
-    systemd_latest=$(curl -s "${systemd_repo}" | grep -Eo 'v[0-9]+' | sort -V | tail -1)
+    systemd_repo="https://github.com/systemd/systemd"
+    systemd_latest=$(curl -s "${systemd_repo}/releases/" | grep -Eo 'v[0-9]+' | sort -V | tail -1)
     systemd_latest=${systemd_latest#v}
     curl --location ${systemd_repo}/archive/refs/tags/v${systemd_latest}.tar.gz --output ${systemd_dir}/systemd-${systemd_latest}.tar.gz
     systemd_latest=systemd-${systemd_latest}.tar.gz
@@ -4337,7 +4327,7 @@ case $save_download_final in
     cd $OLDPWD
     # Udev-lfs, a set of Udev rules special for Linux From Scratch
     udev_lfs_repo="https://anduin.linuxfromscratch.org/LFS/udev-lfs-20230818.tar.xz"
-    systemd_pkg=$(basename "`ls $systemd_dir | grep systemd*/`" /)
+    systemd_pkg=$(basename "${systemd_dir}/$systemd_latest" .tar.gz)
     curl $udev_lfs_repo --output ${systemd_dir}/${systemd_pkg}/udev-lfs-20230818.tar.xz
     checksum=`sha512sum ${systemd_dir}/${systemd_pkg}/udev-lfs-20230818.tar.xz | awk '{print $1}'`
     if [ "$checksum" != "`cat /etc/lfs-install/udev-lfs.sha512`" ]; then
@@ -4371,7 +4361,7 @@ case $save_download_final in
     mkdir -pv $man_db_dir
     man_db_repo="https://download.savannah.gnu.org/releases/man-db/"
     man_db_latest=$(curl -s "${man_db_repo}" | grep -Eo '(man-db-[0-9]+([.][0-9]*)*)+.tar.xz' | sort -V | tail -1)
-    curl ${man_db_repo}/$man_db_latest --output ${man_db_dir}/${man_db_latest}
+    curl --location ${man_db_repo}/$man_db_latest --output ${man_db_dir}/${man_db_latest}
     checksum=`sha512sum ${man_db_dir}/${man_db_latest} | awk '{print $1}'`
     if [ "$checksum" != "`cat /etc/lfs-install/man-db.sha512`" ]; then
       echo -e "${warning}Warning: the SHA-512 checksum of $man_db_latest does not match the trusted one."
@@ -4404,7 +4394,7 @@ case $save_download_final in
     mkdir -pv $procps_ng_dir
     procps_ng_repo="https://sourceforge.net/projects/procps-ng/files/Production/"
     procps_ng_latest=$(curl -s "${procps_ng_repo}" | grep -Eo '(procps-ng-[0-9]+([.][0-9]*)*)+.tar.xz' | sort -V | tail -1)
-    curl --location ${procps_ng_repo}/$procps_ng_latest/ --output ${procps_ng_dir}/${procps_ng_latest}
+    curl --location ${procps_ng_repo}/${procps_ng_latest} --output ${procps_ng_dir}/${procps_ng_latest}
     checksum=`sha512sum ${procps_ng_dir}/${procps_ng_latest} | awk '{print $1}'`
     if [ "$checksum" != "`cat /etc/lfs-install/procps-ng.sha512`" ]; then
       echo -e "${warning}Warning: the SHA-512 checksum of $procps_ng_latest does not match the trusted one."
@@ -4435,8 +4425,8 @@ case $save_download_final in
     # E2fsprogs, utilities for Ext* filesystems
     e2fsprogs_dir=${savelocation}/sources/e2fsprogs
     mkdir -pv $e2fsprogs_dir
-    e2fsprogs_dir_repo="https://sourceforge.net/projects/e2fsprogs/files/e2fsprogs/"
-    e2fsprogs_latest=$(curl -s "${e2fsprogs_repo}" | grep -Eo '(v[0-9]+([.][0-9]*)*)+' | sort -V | tail -1)
+    e2fsprogs_repo="https://sourceforge.net/projects/e2fsprogs/files/e2fsprogs/"
+    e2fsprogs_latest=$(curl -s "${e2fsprogs_repo}" | grep -Eo '(v1([.][0-9]*)+)+' | sort -V | tail -1)
     e2fsprogs_latest=${e2fsprogs_latest#v}
     curl --location ${e2fsprogs_repo}/v${e2fsprogs_latest}/e2fsprogs-${e2fsprogs_latest}.tar.gz --output ${e2fsprogs_dir}/e2fsprogs-${e2fsprogs_latest}.tar.gz
     e2fsprogs_latest=e2fsprogs-${e2fsprogs_latest}.tar.gz
@@ -4472,7 +4462,7 @@ case $save_download_final in
     mkdir -pv $sysklogd_dir
     sysklogd_repo="https://www.infodrom.org/projects/sysklogd/download/"
     sysklogd_latest=$(curl -s "${sysklogd_repo}" | grep -Eo '(sysklogd-[0-9]+([.][0-9]*)*)+.tar.gz' | sort -V | tail -1)
-    curl ${sysklogd_repo}/$sysklogd_latest/ --output ${sysklogd_dir}/${sysklogd_latest}
+    curl --location ${sysklogd_repo}/$sysklogd_latest --output ${sysklogd_dir}/${sysklogd_latest}
     checksum=`sha512sum ${sysklogd_dir}/${sysklogd_latest} | awk '{print $1}'`
     if [ "$checksum" != "`cat /etc/lfs-install/sysklogd.sha512`" ]; then
       echo -e "${warning}Warning: the SHA-512 checksum of $sysklogd_latest does not match the trusted one."
@@ -4506,7 +4496,7 @@ case $save_download_final in
     # Now I've seen everything.
     sysvinit_repo="https://github.com/slicer69/sysvinit/releases/download/3.08/sysvinit-3.08.tar.xz"
     sysvinit_latest=sysvinit-3.08.tar.xz
-    curl ${sysvinit_repo} --output ${sysvinit_dir}/${sysvinit_latest}
+    curl --location ${sysvinit_repo} --output ${sysvinit_dir}/${sysvinit_latest}
     checksum=`sha512sum ${sysvinit_dir}/${sysvinit_latest} | awk '{print $1}'`
     if [ "$checksum" != "`cat /etc/lfs-install/sysvinit.sha512`" ]; then
       echo -e "${warning}Warning: the SHA-512 checksum of $sysvinit_latest does not match the trusted one."
@@ -4536,7 +4526,7 @@ case $save_download_final in
     cd $OLDPWD
     # SysVinit Consolidated LFS patch
     sysvinit_patch_repo="https://www.linuxfromscratch.org/patches/lfs/12.1/sysvinit-3.08-consolidated-1.patch"
-    sysvinit_pkg=$(basename "`ls $sysvinit_dir | grep sysvinit*/`" /)
+    sysvinit_pkg=$(basename "${sysvinit_dir}/$sysvinitlatest" .tar.xz)
     curl $sysvinit_patch_repo --output ${sysvinit_dir}/${sysvinit_pkg}/sysvinit-3.08-consolidated-1.patch
     checksum=`sha512sum ${sysvinit_dir}/${sysvinit_pkg}/sysvinit-3.08-consolidated-1.patch | awk '{print $1}'`
     if [ "$checksum" != "`cat /etc/lfs-install/sysvinit-patch.sha512`" ]; then
@@ -4563,7 +4553,7 @@ case $save_download_final in
     fi
     # LFS-Bootscripts
     lfs_bootscripts_dir=${savelocation}/sources/lfs-bootscripts
-    mkdir -pv lfs_bootscripts_dir
+    mkdir -pv $lfs_bootscripts_dir
     lfs_bootscripts_repo="https://www.linuxfromscratch.org/lfs/downloads/12.1/lfs-bootscripts-20230728.tar.xz"
     lfs_bootscripts_latest=lfs-bootscripts-20230728.tar.xz
     curl ${lfs_bootscripts_repo} --output ${lfs_bootscripts_dir}/${lfs_bootscripts_latest}
@@ -4616,39 +4606,25 @@ case $save_chroot in
     mkdir -v    ${savelocation}/usr/share/doc/lfs-install || true
     cp    -vf   /usr/share/doc/lfs-install/LICENSE           ${savelocation}/usr/share/doc/lfs-install/LICENSE
     chmod a+rwx ${savelocation}/usr/bin/lfs-install-chroot
+    echo  -e    "${info}Copying /etc/lfs-install/bash-pager (credit to https://gist.github.com/SomeCrazyGuy) to the chroot system...${default}"
+    cp    -vf   /etc/lfs-install/bash-pager                  ${savelocation}/usr/bin/bash-pager
+    chmod a+rwx ${savelocation}/usr/bin/bash-pager
     echo  -e    "${info}Saving progress...${default}"
     # Save progress
     echo "`sed '/save_chroot/d'  $fullsavename`" > $fullsavename
     echo -e "save_chroot=1\n" >> $fullsavename
     echo -e "${success}Done!${default}"
-    echo -e "${info}We're now entering the chroot (your future system) environment."
-    echo -e "You can exit it anytime by running 'exit' via the chroot shell.${default}"
-    # A pretty huge chunk of code to decide which options should be passed to lfs-install-chroot
-    chroot_options=""
-    if [[ -z "$opt_debug" ]]; then
-      chroot_options="$chroot_options -d $opt_debug"
-    fi
-    case $opt_full_save in
-      1)
-        chroot_options="$chroot_options -f"
-    esac
-    case $opt_one_job in
-      1)
-        chroot_options="$chroot_options -j"
-    esac
-    case $opt_keep_going in
-      1)
-        chroot_options="$chroot_options -k"
-    esac
-    if [[ -z "$opt_save_file" ]]; then
-      chroot_options="$chroot_options -s ${opt_save_file#$savelocation}"
-    fi
-    chroot "$savelocation" /usr/bin/env -i             \
-                           HOME=/root                  \
-                           TERM="$TERM"                \
-                           PS1='(lfs chroot) \u:\w\$ ' \
-                           PATH=/usr/bin:/usr/sbin     \
-                           /bin/bash --login /usr/bin/lfs-install-chroot $chroot_options
+    echo -e "${info}Entering the chroot (your future system) environment.${default}"
+    chroot "$savelocation" /usr/bin/env -i                              \
+                           HOME=/root                                   \
+                           TERM="$TERM"                                 \
+                           PS1='(lfs chroot) \u:\w\$ '                  \
+                           PATH=/usr/bin:/usr/sbin                      \
+                           opt_debug=$opt_debug                         \
+                           opt_one_job=$opt_one_job                     \
+                           opt_keep_going=$opt_keep_going               \
+                           opt_save_file=${opt_save_file#$savelocation} \
+                           /bin/bash --login /usr/bin/lfs-install-chroot
   ;;
   *)
     save-error "save_chroot"
