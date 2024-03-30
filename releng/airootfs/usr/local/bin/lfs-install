@@ -299,15 +299,19 @@ case $save_partitions in
           echo    "Swap partition is a disk space which is used by system when it's out of RAM."
           echo    "It's a secondary storage for processes which is significantly worse by speed."
           echo -e "The total amount of the system's RAM is `free -t -h | grep Total | awk '{print $2}'`B.${default}"
-          read -p "Choose the size of the swap partition (at least 5GB of total (RAM + swap) memory is required, IEC (*iB) units are also supported):" swapsize
+          read -p "Choose the size of the swap partition (at least 5.5GB of total (RAM + swap) memory is required, IEC (*iB) units are also supported):" swapsize
           if [[ -z "$swapsize" ]]; then
             decide-swap-size
           fi
         }
+        mktable_err() {
+          echo -e "${error}Make sure the directory you are currently in ($(pwd)) isn't (in) the mountpoint."
+          exit 1
+        }
         case $partitiontable in
           [Yy])
             echo -e "${info}Using MBR partition table.${default}"
-            parted --script $parteddevice mktable msdos || echo "Make sure your current directory isn't (in) a mountpoint."; exit 1
+            parted --script $parteddevice mktable msdos || mktable_err
             decide-swap-size
             parted --script $parteddevice mkpart  primary  linux-swap 1MiB            $swapsize       || decide-swap-size
             parted --script $parteddevice mkpart  primary  ext4       $swapsize       ${partedlfs}MiB || decide-swap-size
@@ -315,7 +319,7 @@ case $save_partitions in
           ;;
           [Nn])
             echo -e "${info}Using GPT partition table.${default}"
-            parted --script $parteddevice mktable gpt   || echo "Make sure your current directory isn't (in) a mountpoint."; exit 1
+            parted --script $parteddevice mktable gpt   || mktable_err
             decide-swap-size
             parted --script $parteddevice mkpart  lfs-swap linux-swap 1MiB            $swapsize       || decide-swap-size
             parted --script $parteddevice mkpart  lfs      ext4       $swapsize       ${partedlfs}MiB || decide-swap-size
@@ -762,6 +766,13 @@ case $save_cross_gcc in
     if [ ! -d ${gcc_dir}/build ]; then
       exit 1
     fi
+    case $opt_one_job in
+      1)
+        make -C ${gcc_dir}/build distclean || true
+      ;;
+      *)
+        make -C ${gcc_dir}/build -j$(nproc) distclean || true
+    esac
     pushd ${gcc_dir}/build
       ${gcc_dir}/${gcc_pkg}/configure      \
         --target=$(uname -m)-lfs-linux-gnu \
@@ -790,6 +801,7 @@ case $save_cross_gcc in
         make -C ${gcc_dir}/build install
       ;;
       *)
+        # TODO: Optimize the build time for large .cc files such as insn-recog.cc (using one job at a time)
         make -C ${gcc_dir}/build -j$(nproc)
         make -C ${gcc_dir}/build -j$(nproc) install
     esac
@@ -852,11 +864,11 @@ case $save_linux_headers in
     # Make & install the Headers
     case $opt_one_job in
       1)
-        make -C ${linux_dir}/${linux_pkg} mrproper
+        make -C ${linux_dir}/${linux_pkg} mrproper || true
         make -C ${linux_dir}/${linux_pkg} headers
       ;;
       *)
-        make -C ${linux_dir}/${linux_pkg} -j$(nproc) mrproper
+        make -C ${linux_dir}/${linux_pkg} -j$(nproc) mrproper || true
         make -C ${linux_dir}/${linux_pkg} -j$(nproc) headers
     esac
     # Chapter 5.4.1
@@ -1848,7 +1860,7 @@ case $save_temp_patch in
     pushd ${patch_dir}/${patch_pkg}
       ${patch_dir}/${patch_pkg}/configure --prefix=/usr                    \
                                           --host=$(uname -m)-lfs-linux-gnu \
-                                          --build=$(${patch-dir}/${patch_pkg}/build-aux/config.guess)
+                                          --build=$(${patch_dir}/${patch_pkg}/build-aux/config.guess)
     popd
     case $opt_one_job in
       1)
@@ -2012,38 +2024,48 @@ case $save_temp_xz in
     mkdir -pv $xz_dir
     # Xz Utils seems to update too often for Linux From Scratch (latest available version - 'v13'),
     # so here's a fixed version that is included in the Book.
-    xz_repo="https://github.com/tukaani-project/xz/releases/download/v5.4.6/xz-5.4.6.tar.xz"
-    curl --location ${xz_repo} --output ${xz_dir}/xz-5.4.6.tar.xz
-    checksum=`sha512sum ${xz_dir}/xz-5.4.6.tar.xz | awk '{print $1}'`
-    if [ "$checksum" != "`cat /etc/lfs-install/xz.sha512`" ]; then
-      echo -e "${warning}Warning: the SHA-512 checksum of xz-5.4.6.tar.xz does not match the trusted one."
-      echo    "This means the package was updated recently, or the repository was attacked."
-      echo -e "The tarball 'xz-5.4.6.tar.xz' might have malicious content inside.${default}"
-      xz_invalid_func() {
-        read -p "Proceed anyway? (y,N):" xz_invalid
-        if [[ -z "$xz_invalid" ]]; then
-          xz_invalid=n
-        fi
-        case $xz_invalid in
-          [Yy])
-            echo -e "${warning}Building unstable (or unsafe) temporary Xz Utils.${default}"
-          ;;
-          [Nn])
-            exit 1
-          ;;
-          *)
-            xz_invalid_func
-        esac
-      }
-      xz_invalid_func
-    fi
-    cd $xz_dir
-    echo -e "${info}Extracting xz-5.4.6.tar.xz contents...${default}"
-    tar -xf ${xz_dir}/xz-5.4.6.tar.xz
-    cd $OLDPWD
-    xz_pkg=$(basename "${xz_dir}/xz-5.4.6.tar.xz" .tar.xz)
+#    xz_repo="https://github.com/tukaani-project/xz/releases/download/v5.4.6/xz-5.4.6.tar.xz"
+#    curl --location ${xz_repo} --output ${xz_dir}/xz-5.4.6.tar.xz
+    # Tukaani Project currently has problems with GitHub
+    # probably due to the backdoor in the latest versions.
+    # I didn't want to clone repositories, but I guess I have to this time
+    xz_repo=https://git.tukaani.org/xz.git
+    git clone --depth 1 --branch v5.4.6 $xz_repo || true
+#    checksum=`sha512sum ${xz_dir}/xz-5.4.6.tar.xz | awk '{print $1}'`
+#    if [ "$checksum" != "`cat /etc/lfs-install/xz.sha512`" ]; then
+#      echo -e "${warning}Warning: the SHA-512 checksum of xz-5.4.6.tar.xz does not match the trusted one."
+#      echo    "This means the package was updated recently, or the repository was attacked."
+#      echo -e "The tarball 'xz-5.4.6.tar.xz' might have malicious content inside.${default}"
+#      xz_invalid_func() {
+#        read -p "Proceed anyway? (y,N):" xz_invalid
+#        if [[ -z "$xz_invalid" ]]; then
+#          xz_invalid=n
+#        fi
+#        case $xz_invalid in
+#          [Yy])
+#            echo -e "${warning}Building unstable (or unsafe) temporary Xz Utils.${default}"
+#          ;;
+#          [Nn])
+#            exit 1
+#          ;;
+#          *)
+#            xz_invalid_func
+#        esac
+#      }
+#      xz_invalid_func
+#    fi
+#    cd $xz_dir
+#    echo -e "${info}Extracting xz-5.4.6.tar.xz contents...${default}"
+#    tar -xf ${xz_dir}/xz-5.4.6.tar.xz
+#    cd $OLDPWD
+#    xz_pkg=$(basename "${xz_dir}/xz-5.4.6.tar.xz" .tar.xz)
+    xz_pkg=xz
+    echo -e "${warning}Warning: Xz Utils can only be git-cloned right now (see /usr/local/bin/lfs-install, line 2047), not veryfying the contents.${default}"
     # Build & install
-    mkdir -v ${xz_dir}/build
+    mkdir -pv ${xz_dir}/build
+    pushd ${xz_dir}/${xz_pkg}
+      ${xz_dir}/${xz_pkg}/autogen.sh || true
+    popd
     pushd ${xz_dir}/build
       ${xz_dir}/${xz_pkg}/configure --prefix=/usr                    \
                                     --host=$(uname -m)-lfs-linux-gnu \
@@ -2298,7 +2320,7 @@ case $save_temp_gcc in
       ;;
       *)
         make -C ${gcc_dir}/${gcc_pkg} -j$(nproc)
-        make -C ${gcc_dir}/${gcc_pkg} -j$(nproc) DESTDIR=${savelocation} install
+        make -C ${gcc_dir}/${gcc_pkg} -j$(nproc) DESTDIR=$ install
     esac
     ln -sv ./gcc ${savelocation}/usr/bin/cc
     # Save progress
@@ -3803,7 +3825,7 @@ case $save_download_final in
     # Fixed version
     wheel_repo="https://pypi.org/packages/source/w/wheel/wheel-0.42.0.tar.gz"
     wheel_latest=wheel-0.42.0.tar.gz
-    curl ${wheel_repo} --output ${wheel_dir}/${wheel_latest}
+    curl --location ${wheel_repo} --output ${wheel_dir}/${wheel_latest}
     checksum=`sha512sum ${wheel_dir}/${wheel_latest} | awk '{print $1}'`
     if [ "$checksum" != "`cat /etc/lfs-install/wheel.sha512`" ]; then
       echo -e "${warning}Warning: the SHA-512 checksum of $wheel_latest does not match the trusted one."
@@ -4129,9 +4151,10 @@ case $save_download_final in
     echo -e "${info}Extracting $kbd_latest contents...${default}"
     tar -xf ${kbd_dir}/${kbd_latest}
     cd $OLDPWD
+    kbd_pkg=$(basename ${kbd_dir}/${kbd_latest} .tar.xz)
     # Kbd Backspace/Delete Fix LFS patch
     kbd_patch_repo="https://www.linuxfromscratch.org/patches/lfs/12.1/kbd-2.6.4-backspace-1.patch"
-    kbd_patch_dir=$(basename "${kbd_dir}/$kbd_latest")
+    kbd_patch_dir=$(basename "${kbd_dir}/$kbd_")
     curl $kbd_patch_repo --output ${kbd_dir}/${kbd_patch_dir}/kbd-2.6.4-backspace-1.patch
     checksum=`sha512sum ${kbd_dir}/${kbd_patch_dir}/kbd-2.6.4-backspace-1.patch | awk '{print $1}'`
     if [ "$checksum" != "`cat /etc/lfs-install/kbd-patch.sha512`" ]; then
@@ -4526,7 +4549,7 @@ case $save_download_final in
     cd $OLDPWD
     # SysVinit Consolidated LFS patch
     sysvinit_patch_repo="https://www.linuxfromscratch.org/patches/lfs/12.1/sysvinit-3.08-consolidated-1.patch"
-    sysvinit_pkg=$(basename "${sysvinit_dir}/$sysvinitlatest" .tar.xz)
+    sysvinit_pkg=$(basename "${sysvinit_dir}/$sysvinit_latest" .tar.xz)
     curl $sysvinit_patch_repo --output ${sysvinit_dir}/${sysvinit_pkg}/sysvinit-3.08-consolidated-1.patch
     checksum=`sha512sum ${sysvinit_dir}/${sysvinit_pkg}/sysvinit-3.08-consolidated-1.patch | awk '{print $1}'`
     if [ "$checksum" != "`cat /etc/lfs-install/sysvinit-patch.sha512`" ]; then
@@ -4604,7 +4627,7 @@ case $save_chroot in
     echo  -e    "${info}Copying /etc/lfs-install/lfs-install-chroot and the License to the chroot system...${default}"
     cp    -vf   /etc/lfs-install/lfs-install-chroot          ${savelocation}/usr/bin/lfs-install-chroot
     mkdir -v    ${savelocation}/usr/share/doc/lfs-install || true
-    cp    -vf   /usr/share/doc/lfs-install/LICENSE           ${savelocation}/usr/share/doc/lfs-install/LICENSE
+    cp    -vf   /usr/local/share/doc/lfs-install/LICENSE     ${savelocation}/usr/share/doc/lfs-install/LICENSE
     chmod a+rwx ${savelocation}/usr/bin/lfs-install-chroot
     echo  -e    "${info}Copying /etc/lfs-install/bash-pager (credit to https://gist.github.com/SomeCrazyGuy) to the chroot system...${default}"
     cp    -vf   /etc/lfs-install/bash-pager                  ${savelocation}/usr/bin/bash-pager

@@ -134,7 +134,7 @@ esac
 case $opt_keep_going in
   1)
     set +eu
-fi
+esac
 
 echo "lfs-install-chroot Copyright (C) 2023 Beloglazov Mark <justaguy3331@gmail.com>
 
@@ -665,6 +665,9 @@ case $save_final_glibc in
       *)
         make -C ${glibc_dir}/build -j$(nproc) distclean || true
     esac
+    ln -sv ./libnsl.so.1       ${savelocation}/usr/lib/libnsl.so       || true
+    ln -sv ./libnss_dns.so.2   ${savelocation}/usr/lib/libnss_dns.so   || true
+    ln -sv ./libnss_files.so.2 ${savelocation}/usr/lib/libnss_files.so || true
     # Chapter 8.5.1 (this would still not be the final distro, so it doesn't matter if I install Linux From Scratch Glibc)
     pushd ${glibc_dir}/${glibc_pkg}
       patch -Np1 -i ${glibc_dir}/${glibc_pkg}/glibc-2.39-fhs-1.patch || true
@@ -701,6 +704,7 @@ case $save_final_glibc in
       ;;
       *)
         make -C ${glibc_dir}/build -j$(nproc)
+        echo -e "${warning}Building tests can take too long and too much storage space.${default}"
         glibc_check_func() {
           read -p "Are you sure you want to check GNU Glibc for sanity? (y/N)" glibc_check
           if [[ -z "$glibc_check" ]]; then
