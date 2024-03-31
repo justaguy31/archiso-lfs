@@ -985,6 +985,24 @@ case $save_target_glibc in
         make -C ${glibc_dir}/build -j$(nproc) DESTDIR=${savelocation} install
     esac
     sed '/RTLDLIST=/s@/usr@@g' -i ${savelocation}/usr/bin/ldd
+    # Glibc doesn't seem to create important symlinks by itself
+    ln    -sv   ./libBrokenLocale.so.1 ${savelocation}/usr/lib/libBrokenLocale.so || true
+    ln    -sv   ./libanl.so.1          ${savelocation}/usr/lib/libanl.so          || true
+    ln    -sv   ./libdl.so.2           ${savelocation}/usr/lib/libdl.so           || true
+    ln    -sv   ./libmvec.so.1         ${savelocation}/usr/lib/libmvec.so         || true
+    ln    -sv   ./libm.so.6            ${savelocation}/usr/lib/libm.so            || true
+    ln    -sv   ./libnsl.so.1          ${savelocation}/usr/lib/libnsl.so          || true
+    ln    -sv   ./libnss_compat.so.2   ${savelocation}/usr/lib/libnss_compat.so   || true
+    ln    -sv   ./libnss_db.so.2       ${savelocation}/usr/lib/libnss_db.so       || true
+    ln    -sv   ./libnss_dns.so.2      ${savelocation}/usr/lib/libnss_dns.so      || true
+    ln    -sv   ./libnss_files.so.2    ${savelocation}/usr/lib/libnss_files.so    || true
+    ln    -sv   ./libnss_hesiod.so.2   ${savelocation}/usr/lib/libnss_hesiod.so   || true
+    ln    -sv   ./libpthread.so.0      ${savelocation}/usr/lib/libpthread.so      || true
+    ln    -sv   ./libresolv.so.2       ${savelocation}/usr/lib/libresolv.so       || true
+    ln    -sv   ./librt.so.2           ${savelocation}/usr/lib/librt.so           || true
+    ln    -sv   ./libthread_db.so.1    ${savelocation}/usr/lib/libthread_db.so    || true
+    ln    -sv   ./libutil.so.1         ${savelocation}/usr/lib/libutil.so         || true
+    chmod a+rwx ${savelocation}/usr/lib/{libBrokenLocale.so,libanl.so,libdl.so,libmvec.so,libm.so,libnsl.so,libnss_compat.so,libnss_db.so,libnss_dns.so,libnss_files.so,libnss_hesiod.so,libpthread.so,libresolv.so,librt.so,libthread_db.so,libutil.so}
     # Save progress
     echo "`sed '/save_target_glibc/d'  $fullsavename`" > $fullsavename
     echo -e "save_target_glibc=1\n" >> $fullsavename
