@@ -665,9 +665,6 @@ case $save_final_glibc in
       *)
         make -C ${glibc_dir}/build -j$(nproc) distclean || true
     esac
-    ln -sv ./libnsl.so.1       ${savelocation}/usr/lib/libnsl.so       || true
-    ln -sv ./libnss_dns.so.2   ${savelocation}/usr/lib/libnss_dns.so   || true
-    ln -sv ./libnss_files.so.2 ${savelocation}/usr/lib/libnss_files.so || true
     # Chapter 8.5.1 (this would still not be the final distro, so it doesn't matter if I install Linux From Scratch Glibc)
     pushd ${glibc_dir}/${glibc_pkg}
       patch -Np1 -i ${glibc_dir}/${glibc_pkg}/glibc-2.39-fhs-1.patch || true
@@ -919,8 +916,9 @@ case $save_final_xz in
   ;;
   0)
     xz_dir=/sources/xz
-    xz_pkg=$(ls $xz_dir | grep .tar.xz)
-    xz_pkg=$(basename ${xz_dir}/$xz_pkg .tar.xz)
+#    xz_pkg=$(ls $xz_dir | grep .tar.xz)
+#    xz_pkg=$(basename ${xz_dir}/$xz_pkg .tar.xz)
+    xz_pkg=xz
     pushd ${xz_dir}/${xz_pkg}
       ${xz_dir}/${xz_pkg}/configure --prefix=/usr    \
                   --disable-static \
@@ -1115,7 +1113,7 @@ case $save_final_m4 in
     save-error "save_final_m4"
 esac
 
-# GNU bc arbitrary precision numeric processing language
+# bc arbitrary precision numeric processing language
 if [[ -z "$save_final_bc" ]]; then
   save_final_bc=0
 fi
@@ -1124,10 +1122,10 @@ case $save_final_bc in
   ;;
   0)
     bc_dir=/sources/bc
-    bc_pkg=$(ls $bc_dir | grep .tar.gz)
-    bc_pkg=$(basename ${bc_dir}/$bc_pkg .tar.gz)
+    bc_pkg=$(ls $bc_dir | grep .tar.xz)
+    bc_pkg=$(basename ${bc_dir}/$bc_pkg .tar.xz)
     pushd ${bc_dir}/${bc_pkg}
-      ${bc_dir}/${bc_pkg}/configure --prefix=/usr -G -O3 -r
+      CC=gcc ${bc_dir}/${bc_pkg}/configure --prefix=/usr -G -O3 -r
     popd
     case $opt_one_job in
       1)
@@ -1202,6 +1200,7 @@ case $save_final_tcl in
     tcl_dir=/sources/tcl
     tcl_pkg=$(ls $tcl_dir | grep .tar.gz)
     tcl_pkg=$(basename ${tcl_dir}/$tcl_pkg .tar.gz)
+    tcl_pkg=${tcl_pkg%'-src'}
     # Chapter 8.15.1
     pushd ${tcl_dir}/${tcl_pkg}/unix
       SRCDIR=${tcl_dir}/${tcl_pkg}
@@ -1242,10 +1241,10 @@ case $save_final_tcl in
     chmod -v u+w /usr/lib/libtcl8.6.so
     case $opt_one_job in
       1)
-        make -C ${tcl_dir}/${tcl_pkg} install-private-headers
+        make -C ${tcl_dir}/${tcl_pkg}/unix install-private-headers
       ;;
       *)
-        make -C ${tcl_dir}/${tcl_pkg} -j$(nproc) install-private-headers
+        make -C ${tcl_dir}/${tcl_pkg}/unix -j$(nproc) install-private-headers
     esac
     ln -sfv ./tclsh8.6 /usr/bin/tclsh
     mv /usr/share/man/man3/{Thread,Tcl_Thread}.3
@@ -1322,15 +1321,15 @@ case $save_final_dejagnu in
                                   ${dejagnu_dir}/${dejagnu_pkg}/doc/dejagnu.texi
     case $opt_one_job in
       1)
-        make -C ${dejagnu_dir}/${dejagnu_pkg} check || true
-        make -C ${dejagnu_dir}/${dejagnu_pkg} install
+        make -C ${dejagnu_dir}/${dejagnu_pkg}/build check || true
+        make -C ${dejagnu_dir}/${dejagnu_pkg}/build install
       ;;
       *)
-        make -C ${dejagnu_dir}/${dejagnu_pkg} -j$(nproc) check || true
-        make -C ${dejagnu_dir}/${dejagnu_pkg} -j$(nproc) install
+        make -C ${dejagnu_dir}/${dejagnu_pkg}/build -j$(nproc) check || true
+        make -C ${dejagnu_dir}/${dejagnu_pkg}/build -j$(nproc) install
     esac
     install -v -dm755  /usr/share/doc/dejagnu-1.6.3
-    install -v -m644   ${dejagnu_dir}/${dejagnu_pkg}/build/doc/dejagnu.{html,txt} /usr/share/doc/${dejagnu_pkg}
+    install -v -m644   ${dejagnu_dir}/${dejagnu_pkg}/doc/dejagnu.{html,txt} /usr/share/doc/${dejagnu_pkg}
     # Save progress
     echo "`sed '/save_final_dejagnu/d'  $fullsavename`" > $fullsavename
     echo -e "save_final_dejagnu=1\n" >> $fullsavename
@@ -1391,16 +1390,12 @@ case $save_final_binutils in
     binutils_dir=/sources/binutils
     binutils_pkg=$(ls $binutils_dir | grep .tar.xz)
     binutils_pkg=$(basename ${binutils_dir}/$binutils_pkg .tar.xz)
-    case $opt_one_job in
-      1)
-        make -C ${binutils_dir}/${binutils_pkg} distclean || true
-        make -C ${binutils_dir}/build           distclean || true
-      ;;
-      *)
-        make -C ${binutils_dir}/${binutils_pkg} -j $(nproc) distclean || true
-        make -C ${binutils_dir}/build           -j $(nproc) distclean || true
-    esac
-    mkdir -v ${binutls_dir}/build
+    echo -e "${info}Removing ${binutils_dir}/$binutils_pkg for rebuilding...${default}"
+    rm -r ${binutils_dir}/$binutils_pkg
+    pushd ${binutils_dir}
+      tar -xf ${binutils_dir}/${binutils_pkg}.tar.xz
+    popd
+    mkdir -pv ${binutils_dir}/build
     pushd ${binutils_dir}/build
       ${binutils_dir}/${binutils_pkg}/configure --prefix=/usr       \
                                                 --sysconfdir=/etc   \
@@ -1415,14 +1410,46 @@ case $save_final_binutils in
     popd
     case $opt_one_job in
       1)
-        make -C ${binutils_dir}/${binutils_pkg} tooldir=/usr
-        make -C ${binutils_dir}/${binutils_pkg} -k           check || true
-        make -C ${binutils_dir}/${binutils_pkg} tooldir=/usr install
+        make -C ${binutils_dir}/build tooldir=/usr
+        echo -e "${warning}Building tests can take too long.${default}"
+        binutils_check_func() {
+          read -p "Are you sure you want to check GNU Binutils for sanity? (y/N)" binutils_check
+          if [[ -z "$binutils_check" ]]; then
+            binutils_check=n
+          fi
+          case $binutils_check in
+            [Yy])
+              make -C ${binutils_dir}/build -k check || true
+            ;;
+            [Nn])
+            ;;
+            *)
+              binutils_check_func
+          esac
+        }
+        binutils_check_func
+        make -C ${binutils_dir}/build tooldir=/usr install
       ;;
       *)
-        make -C ${binutils_dir}/${binutils_pkg} -j$(nproc) tooldir=/usr
-        make -C ${binutils_dir}/${binutils_pkg} -j$(nproc) -k           check || true
-        make -C ${binutils_dir}/${binutils_pkg} -j$(nproc) tooldir=/usr install
+        make -C ${binutils_dir}/build -j$(nproc) tooldir=/usr
+        echo -e "${warning}Building tests can take too long.${default}"
+        binutils_check_func() {
+          read -p "Are you sure you want to check GNU Binutils for sanity? (y/N)" binutils_check
+          if [[ -z "$binutils_check" ]]; then
+            binutils_check=n
+          fi
+          case $binutils_check in
+            [Yy])
+              make -C ${binutils_dir}/build -j$(nproc) -k check || true
+            ;;
+            [Nn])
+            ;;
+            *)
+              binutils_check_func
+          esac
+        }
+        binutils_check_func
+        make -C ${binutils_dir}/build -j$(nproc) tooldir=/usr install
     esac
     rm -fv /usr/lib/lib{bfd,ctf,ctf-nobfd,gprofng,opcodes,sframe}.a
     # Save progress
@@ -1438,7 +1465,7 @@ esac
 
 # GNU Multiple Precision arithmetic library (GMP)
 if [[ -z "$save_final_gmp" ]]; then
-  save_final_gmp
+  save_final_gmp=0
 fi
 case $save_final_gmp in
   1)
@@ -1452,10 +1479,10 @@ case $save_final_gmp in
     # GMP is located at GCC source code directory
     case $opt_one_job in
       1)
-        make -C ${gcc_dir}/build distclean || true
+        make -C $gmp_dir distclean || true
       ;;
       *)
-        make -C ${gcc_dir}/build -j$(nproc) distclean || true
+        make -C $gmp_dir -j$(nproc) distclean || true
     esac
     pushd $gmp_dir
       ${gmp_dir}/configure --prefix=/usr    \
@@ -1467,6 +1494,7 @@ case $save_final_gmp in
       1)
         make -C $gmp_dir
         make -C $gmp_dir html
+        echo -e "${info}Note: the sanity check if redirected in '/sources/gmp-check-log'.${default}"
         make -C $gmp_dir check 2>&1 | tee /sources/gmp-check-log
         make -C $gmp_dir install
         make -C $gmp_dir install-html
@@ -1474,6 +1502,7 @@ case $save_final_gmp in
       *)
         make -C $gmp_dir -j$(nproc)
         make -C $gmp_dir -j$(nproc) html
+        echo -e "${info}Note: the sanity check if redirected in '/sources/gmp-check-log'.${default}"
         make -C $gmp_dir -j$(nproc) check 2>&1 | tee /sources/gmp-check-log
         make -C $gmp_dir -j$(nproc) install
         make -C $gmp_dir -j$(nproc) install-html
@@ -1744,9 +1773,11 @@ case $save_final_shadow in
     shadow_pkg=$(ls $shadow_dir | grep .tar.xz)
     shadow_pkg=$(basename ${shadow_dir}/$shadow_pkg .tar.xz)
     sed -i 's/groups$(EXEEXT) //' ${shadow_dir}/${shadow_pkg}/src/Makefile.in
-    find man -name ${shadow_dir}/${shadow_pkg}/Makefile.in -exec sed -i 's/groups\.1 / /'   {} \;
-    find man -name ${shadow_dir}/${shadow_pkg}/Makefile.in -exec sed -i 's/getspnam\.3 / /' {} \;
-    find man -name ${shadow_dir}/${shadow_pkg}/Makefile.in -exec sed -i 's/passwd\.5 / /'   {} \;
+    pushd ${shadow_dir}/$shadow_pkg
+      find man -name Makefile.in -exec sed -i 's/groups\.1 / /'   {} \;
+      find man -name Makefile.in -exec sed -i 's/getspnam\.3 / /' {} \;
+      find man -name Makefile.in -exec sed -i 's/passwd\.5 / /'   {} \;
+    popd
     sed -e 's:#ENCRYPT_METHOD DES:ENCRYPT_METHOD YESCRYPT:' \
         -e 's:/var/spool/mail:/var/mail:'                   \
         -e '/PATH=/{s@/sbin:@@;s@/bin:@@}'                  \
@@ -1788,7 +1819,8 @@ case $save_final_shadow in
       *)
         shadow_passwd_root_func
     esac
-    } shadow_passwd_root_func
+    }
+    shadow_passwd_root_func
     # Save progress
     echo "`sed '/save_final_shadow/d'  $fullsavename`" > $fullsavename
     echo -e "save_final_shadow=1\n" >> $fullsavename
@@ -1811,6 +1843,14 @@ case $save_final_gcc in
     gcc_dir=/sources/gcc
     gcc_pkg=$(ls $gcc_dir | grep .tar.xz)
     gcc_pkg=$(basename ${gcc_dir}/$gcc_pkg .tar.xz)
+    # 'make distclean' doesn't seem to run at other directories that have 'configure' script as I figured out so far
+    echo -e "${info}Removing ${gcc_dir}/$gcc_pkg and ${gcc_dir}/build for rebuilding...${default}"
+    rm -r ${gcc_dir}/$gcc_pkg || true
+    rm -r ${gcc_dir}/build    || true
+    mkdir -pv ${gcc_dir}/build
+    pushd $gcc_dir
+      tar -xf ${gcc_dir}/${gcc_pkg}.tar.xz
+    popd
     case $(uname -m) in
       x86_64)
         sed -e      '/m64=/s/lib64/lib/' \
@@ -1818,15 +1858,15 @@ case $save_final_gcc in
       ;;
     esac
     pushd ${gcc_dir}/build
-      {gcc_dir}/${gcc_pkg}/configure --prefix=/usr            \
-                                     LD=ld                    \
-                                     --enable-languages=c,c++ \
-                                     --enable-default-pie     \
-                                     --enable-default-ssp     \
-                                     --disable-multilib       \
-                                     --disable-bootstrap      \
-                                     --disable-fixincludes    \
-                                     --with-system-zlib
+      ${gcc_dir}/${gcc_pkg}/configure --prefix=/usr            \
+                                      LD=ld                    \
+                                      --enable-languages=c,c++ \
+                                      --enable-default-pie     \
+                                      --enable-default-ssp     \
+                                      --disable-multilib       \
+                                      --disable-bootstrap      \
+                                      --disable-fixincludes    \
+                                      --with-system-zlib
     popd
     case $opt_one_job in
       1)
@@ -1840,16 +1880,48 @@ case $save_final_gcc in
     chown -R TrustedInstaller ${gcc_dir}/build
     case $opt_one_job in
       1)
-        pushd ${gcc_dir}/build
-          su TrustedInstaller -c "PATH=$PATH make -k check || true" || true
-        popd
+        echo -e "${warning}Building tests can take too long and too much storage space.${default}"
+        gcc_check_func() {
+          read -p "Are you sure you want to check GNU Compiler Collection for sanity? (y/N)" gcc_check
+          if [[ -z "$gcc_check" ]]; then
+            gcc_check=n
+          fi
+          case $gcc_check in
+            [Yy])
+              pushd ${gcc_dir}/build
+                su TrustedInstaller -c "PATH=$PATH make -k check || true" || true
+              popd
+            ;;
+            [Nn])
+            ;;
+            *)
+              gcc_check_func
+          esac
+        }
+        gcc_check_func
         make -C ${gcc_dir}/build install
       ;;
       *)
-        pushd ${gcc_dir}/build
-          su TrustedInstaller -c "PATH=$PATH make -k check -j$(nproc) || true" || true
-        popd
-        make -C ${gcc_dir}/build -j(nproc) install
+        echo -e "${warning}Building tests can take too long and too much storage space.${default}"
+        gcc_check_func() {
+          read -p "Are you sure you want to check GNU Compiler Collection for sanity? (y/N)" gcc_check
+          if [[ -z "$gcc_check" ]]; then
+            gcc_check=n
+          fi
+          case $gcc_check in
+            [Yy])
+              pushd ${gcc_dir}/build
+                su TrustedInstaller -c "PATH=$PATH make -k -j$(nproc) check || true" || true
+              popd
+            ;;
+            [Nn])
+            ;;
+            *)
+              gcc_check_func
+          esac
+        }
+        gcc_check_func
+        make -C ${gcc_dir}/build -j$(nproc) install
     esac
     chown -v -R root:root /usr/lib/gcc/$(gcc -dumpmachine)/${gcc_pkg#gcc-}/include{,-fixed}
     ln -svr ../bin/cpp /usr/lib/cpp
@@ -1868,13 +1940,13 @@ case $save_final_gcc in
     if [[ -z "`grep -B4 '^ /usr/include' /home/TrustedInstaller/dummy.log`" ]]; then
       echo -e "${warning}GCC does not work properly [test 3 failed].${default}"
     fi
-    if [[ -z "`grep 'SEARCH.*/usr/lib' /home/TrustedInstaller/dummy.log |sed 's|; |\n|g' | grep lib`"]]; then
+    if [[ -z "`grep 'SEARCH.*/usr/lib' /home/TrustedInstaller/dummy.log |sed 's|; |\n|g' | grep lib`" ]]; then
       echo -e "${warning}GCC does not work properly [test 4 failed].${default}"
     fi
-    if [[ -z "`grep \"/lib.*/libc.so.6 \" /home/TrustedInstaller/dummy.log | grep succeeded`" ]]; then
+    if [[ -z "`grep '/lib.*/libc.so.6 ' /home/TrustedInstaller/dummy.log | grep succeeded`" ]]; then
       echo -e "${warning}GCC does not work properly [test 5 failed].${default}"
     fi
-    if [[ -z "`grep found dummy.log | grep found | grep ld-linux`" ]]; then
+    if [[ -z "`grep found /home/TrustedInstaller/dummy.log | grep ld-linux`" ]]; then
       echo -e "${warning}GCC does not work properly [test 6 failed].${default}"
     fi
     rm    -v  /home/TrustedInstaller/{dummy.c,a.out,dummy.log} || true
@@ -1893,7 +1965,7 @@ esac
 
 # Ncurses library
 if [[ -z $save_final_ncurses ]]; then
-  save_final_ncurse=0
+  save_final_ncurses=0
 fi
 case $save_final_ncurses in
   1)
@@ -2053,6 +2125,14 @@ case $save_final_gettext in
     gettext_dir=/sources/gettext
     gettext_pkg=$(ls $gettext_dir | grep .tar.xz)
     gettext_pkg=$(basename ${gettext_dir}/$gettext_pkg .tar.xz)
+    # Clean up after previous build
+    case $opt_one_job in
+      1)
+        make -C ${gettext_dir}/$gettext_pkg distclean || true
+      ;;
+      *)
+        make -C ${gettext_dir}/$gettext_pkg -j$(nproc) distclean || true
+    esac
     pushd ${gettext_dir}/$gettext_pkg
       ${gettext_dir}/${gettext_pkg}/configure --prefix=/usr    \
                                               --disable-static \
@@ -2061,12 +2141,44 @@ case $save_final_gettext in
     case $opt_one_job in
       1)
         make -C ${gettext_dir}/${gettext_pkg}
-        make -C ${gettext_dir}/${gettext_pkg} check || true
+        echo -e "${warning}Running tests can take too long.${default}"
+        gettext_check_func() {
+          read -p "Are you sure you want to check GNU Gettext utilities for sanity? (y/N)" gettext_check
+          if [[ -z "$gettext_check" ]]; then
+            gettext_check=n
+          fi
+          case $gettext_check in
+            [Yy])
+              make -C ${gettext_dir}/$gettext_pkg check || true
+            ;;
+            [Nn])
+            ;;
+            *)
+              gettext_check_func
+          esac
+        }
+        gettext_check_func
         make -C ${gettext_dir}/${gettext_pkg} install
       ;;
       *)
         make -C ${gettext_dir}/${gettext_pkg} -j$(nproc)
-        make -C ${gettext_dir}/${gettext_pkg} -j$(nproc) check || true
+        echo -e "${warning}Running tests can take too long.${default}"
+        gettext_check_func() {
+          read -p "Are you sure you want to check GNU Gettext utilities for sanity? (y/N)" gettext_check
+          if [[ -z "$gettext_check" ]]; then
+            gettext_check=n
+          fi
+          case $gettext_check in
+            [Yy])
+              make -C ${gettext_dir}/$gettext_pkg -j$(nproc) check || true
+            ;;
+            [Nn])
+            ;;
+            *)
+              gettext_check_func
+          esac
+        }
+        gettext_check_func
         make -C ${gettext_dir}/${gettext_pkg} -j$(nproc) install
     esac
     chmod -v 0755 /usr/lib/preloadable_libintl.so
@@ -2092,6 +2204,13 @@ case $save_final_bison in
     bison_dir=/sources/bison
     bison_pkg=$(ls $bison_dir | grep .tar.xz)
     bison_pkg=$(basename ${bison_dir}/$bison_pkg .tar.xz)
+    case $opt_one_job in
+      1)
+        make -C ${bison_dir}/$bison_pkg distclean || true
+      ;;
+      *)
+        make -C ${bison_dir}/$bison_pkg -j$(nproc) distclean || true
+    esac
     pushd ${bison_dir}/$bison_pkg
       ${bison_dir}/$bison_pkg/configure --prefix=/usr \
                                         --docdir=/usr/share/doc/$bison_pkg
@@ -2099,12 +2218,43 @@ case $save_final_bison in
     case $opt_one_job in
       1)
         make -C ${bison_dir}/${bison_pkg}
-        make -C ${bison_dir}/${bison_pkg} check || true
+        echo -e "${warning}Running tests can take too long.${default}"
+        bison_check_func() {
+          read -p "Are you sure you want to check GNU Bison for sanity? (y/N)" bison_check
+          if [[ -z "$bison_check" ]]; then
+            bison_check=n
+          fi
+          case $bison_check in
+            [Yy])
+              make -C ${bison_dir}/$bison_pkg check || true
+            ;;
+            [Nn])
+            ;;
+            *)
+              bison_check_func
+          esac
+        }
+        bison_check_func
         make -C ${bison_dir}/${bison_pkg} install
       ;;
       *)
         make -C ${bison_dir}/${bison_pkg} -j$(nproc)
-        make -C ${bison_dir}/${bison_pkg} -j$(nproc) check || true
+        bison_check_func() {
+          read -p "Are you sure you want to check GNU Bison for sanity? (y/N)" bison_check
+          if [[ -z "$bison_check" ]]; then
+            bison_check=n
+          fi
+          case $bison_check in
+            [Yy])
+              make -C ${bison_dir}/$bison_pkg -j$(nproc) check || true
+            ;;
+            [Nn])
+            ;;
+            *)
+              bison_check_func
+          esac
+        }
+        bison_check_func
         make -C ${bison_dir}/${bison_pkg} -j$(nproc) install
     esac
     # Save progress
@@ -2129,14 +2279,11 @@ case $save_final_grep in
     grep_dir=/sources/grep
     grep_pkg=$(ls $grep_dir | grep .tar.xz)
     grep_pkg=$(basename ${grep_dir}/$grep_pkg .tar.xz)
-    # Clean up after previous build
-    case $opt_one_job in
-      1)
-        make -C ${grep_dir}/${grep_pkg} distclean || true
-      ;;
-      *)
-        make -C ${grep_dir}/${grep_pkg} -j$(nproc) distclean || true
-    esac
+    echo -e "${info}Removing ${grep_dir}/$grep_pkg for rebuilding...${default}"
+    rm -r ${grep_dir}/$grep_pkg || true
+    pushd ${grep_dir}
+      tar -xf ${grep_dir}/${grep_pkg}.tar.xz || true
+    popd
     sed -i "s/echo/#echo/" ${grep_dir}/${grep_pkg}/src/egrep.sh
     pushd ${grep_dir}/${grep_pkg}
       ${grep_dir}/${grep_pkg}/configure --prefix=/usr
@@ -2183,41 +2330,50 @@ case $save_final_bash in
         make -C ${bash_dir}/${bash_pkg} -j$(nproc) distclean || true
     esac
     pushd ${bash_dir}/$bash_pkg
-      patch -Np1 -i ${bash_dir}/${bash_pkg}/bash-5.2.21-upstream_fixes-1.patch
+      patch -Np1 -i ${bash_dir}/${bash_pkg}/bash-5.2.21-upstream_fixes-1.patch || true
       ${bash_dir}/${bash_pkg}/configure --prefix=/usr             \
                                         --without-bash-malloc     \
                                         --with-installed-readline \
-                                        --enable-net-redirections
+                                        --enable-net-redirections \
                                         --docdir=/usr/share/doc/$bash_pkg
     popd
     case $opt_one_job in
       1)
         make -C ${bash_dir}/${bash_pkg}
-        chown -R TrustedInstaller ${bash_dir}/${bash_pkg}
-        pushd ${bash_dir}/${bash_pkg}
-          # Sorry about 'EOF' being placed like that, syntax highlighting messes up and possibly this is the way it works
-          su -s /usr/bin/expect TrustedInstaller << "EOF"
-          set timeout -1
-          spawn make tests || true
-          expect eof
-          lassign [wait] _ _ _ value
-          exit $value
-EOF       || true
-        popd
+        ignore_errs() {
+          chown -R TrustedInstaller ${bash_dir}/${bash_pkg}
+          pushd ${bash_dir}/${bash_pkg}
+            # Sorry about 'EOF' being placed like that, syntax highlighting messes up and possibly this is the way it works
+            su -s /usr/bin/expect TrustedInstaller << "EOF"
+            set timeout -1
+            spawn make tests
+            expect eof
+            lassign [wait] _ _ _ value
+            exit $value
+EOF
+          popd
+        }
+        ignore_errs || true
         make -C ${bash_dir}/${bash_pkg} install
       ;;
       *)
         make -C ${bash_dir}/${bash_pkg} -j$(nproc)
-        chown -R TrustedInstaller ${bash_dir}/${bash_pkg}
-        pushd ${bash_dir}/${bash_pkg}
-          su -s /usr/bin/expect TrustedInstaller << "EOF"
-          set timeout -1
-          spawn make -j$(nproc) tests || true
-          expect eof
-          lassign [wait] _ _ _ value
-          exit $value
-EOF       || true
-        popd
+        ignore_errs() {
+          chown -R TrustedInstaller ${bash_dir}/${bash_pkg}
+          pushd ${bash_dir}/${bash_pkg}
+            #can't read "(nproc)": no such variable
+            #    while executing
+            #"spawn make -j$(nproc)" tests || true
+            su -s /usr/bin/expect TrustedInstaller << "EOF"
+            set timeout -1
+            spawn make tests
+            expect eof
+            lassign [wait] _ _ _ value
+            exit $value
+EOF
+          popd
+        }
+        ignore_errs || true
         make -C ${bash_dir}/${bash_pkg} -j$(nproc) install
     esac
     # Save progress
@@ -2248,12 +2404,44 @@ case $save_final_libtool in
     case $opt_one_job in
       1)
         make -C ${libtool_dir}/${libtool_pkg}
-        make -C ${libtool_dir}/${libtool_pkg} -k check || true
+        echo -e "${warning}Running tests can take too long.${default}"
+        libtool_check_func() {
+          read -p "Are you sure you want to check GNU Libtool for sanity? (y/N)" libtool_check
+          if [[ -z "$libtool_check" ]]; then
+            libtool_check=n
+          fi
+          case $libtool_check in
+            [Yy])
+              make -C ${libtool_dir}/$libtool_pkg -k check || true
+            ;;
+            [Nn])
+            ;;
+            *)
+              libtool_check_func
+          esac
+        }
+        libtool_check_func
         make -C ${libtool_dir}/${libtool_pkg} install
       ;;
       *)
         make -C ${libtool_dir}/${libtool_pkg} -j$(nproc)
-        make -C ${libtool_dir}/${libtool_pkg} -j$(nproc) -k check || true
+        echo -e "${warning}Running tests can take too long.${default}"
+        libtool_check_func() {
+          read -p "Are you sure you want to check GNU Libtool for sanity? (y/N)" libtool_check
+          if [[ -z "$libtool_check" ]]; then
+            libtool_check=n
+          fi
+          case $libtool_check in
+            [Yy])
+              make -C ${libtool_dir}/$libtool_pkg -j$(nproc) -k check || true
+            ;;
+            [Nn])
+            ;;
+            *)
+              libtool_check_func
+          esac
+        }
+        libtool_check_func
         make -C ${libtool_dir}/${libtool_pkg} -j$(nproc) install
     esac
     rm -fv /usr/lib/libltdl.a
@@ -2505,12 +2693,44 @@ case $save_final_perl in
     case $opt_one_job in
       1)
         make -C ${perl_dir}/${perl_pkg}
-        make -C ${perl_dir}/${perl_pkg} test_harness || true
+        echo -e "${warning}Running tests can take too long and too much storage space.${default}"
+        perl_check_func() {
+          read -p "Are you sure you want to check Perl programming language for sanity? (y/N)" perl_check
+          if [[ -z "$perl_check" ]]; then
+            perl_check=n
+          fi
+          case $perl_check in
+            [Yy])
+              make -C ${perl_dir}/$perl_pkg test_harness || true
+            ;;
+            [Nn])
+            ;;
+            *)
+              perl_check_func
+          esac
+        }
+        perl_check_func
         make -C ${perl_dir}/${perl_pkg} install
       ;;
       *)
         make -C ${perl_dir}/${perl_pkg} -j$(nproc)
-        make -C ${perl_dir}/${perl_pkg} TEST_JOBS=$(nproc) test_harness || true
+        echo -e "${warning}Running tests can take too long and too much storage space.${default}"
+        perl_check_func() {
+          read -p "Are you sure you want to check Perl programming language for sanity? (y/N)" perl_check
+          if [[ -z "$perl_check" ]]; then
+            perl_check=n
+          fi
+          case $perl_check in
+            [Yy])
+              make -C ${perl_dir}/$perl_pkg TEST_JOBS=$(nproc) test_harness || true
+            ;;
+            [Nn])
+            ;;
+            *)
+              perl_check_func
+          esac
+        }
+        perl_check_func
         make -C ${perl_dir}/${perl_pkg} -j$(nproc) install
     esac
     unset BUILD_ZLIB BUILD_BZIP2
@@ -2617,12 +2837,44 @@ case $save_final_autoconf in
     case $opt_one_job in
       1)
         make -C ${autoconf_dir}/${autoconf_pkg}
-        make -C ${autoconf_dir}/${autoconf_pkg} check || true
+        echo -e "${warning}Running tests can take too long and too much storage space.${default}"
+        autoconf_check_func() {
+          read -p "Are you sure you want to check GNU Autoconf for sanity? (y/N)" autoconf_check
+          if [[ -z "$autoconf_check" ]]; then
+            autoconf_check=n
+          fi
+          case $autoconf_check in
+            [Yy])
+              make -C ${autoconf_dir}/$autoconf_pkg check || true
+            ;;
+            [Nn])
+            ;;
+            *)
+              autoconf_check_func
+          esac
+        }
+        autoconf_check_func
         make -C ${autoconf_dir}/${autoconf_pkg} install
       ;;
       *)
         make -C ${autoconf_dir}/${autoconf_pkg} -j$(nproc)
-        make -C ${autoconf_dir}/${autoconf_pkg} -j$(nproc) check || true
+        echo -e "${warning}Running tests can take too long and too much storage space.${default}"
+        autoconf_check_func() {
+          read -p "Are you sure you want to check GNU Autoconf for sanity? (y/N)" autoconf_check
+          if [[ -z "$autoconf_check" ]]; then
+            autoconf_check=n
+          fi
+          case $autoconf_check in
+            [Yy])
+              make -C ${autoconf_dir}/$autoconf_pkg -j$(nproc) check || true
+            ;;
+            [Nn])
+            ;;
+            *)
+              autoconf_check_func
+          esac
+        }
+        autoconf_check_func
         make -C ${autoconf_dir}/${autoconf_pkg} -j$(nproc) install
     esac
     # Save progress
@@ -2654,12 +2906,44 @@ case $save_final_automake in
     case $opt_one_job in
       1)
         make -C ${automake_dir}/${automake_pkg}
-        make -C ${automake_dir}/${automake_pkg} check || true
+        echo -e "${warning}Running tests can take too long.${default}"
+        automake_check_func() {
+          read -p "Are you sure you want to check GNU Automake for sanity? (y/N)" automake_check
+          if [[ -z "$automake_check" ]]; then
+            automake_check=n
+          fi
+          case $automake_check in
+            [Yy])
+              make -C ${automake_dir}/$automake_pkg check || true
+            ;;
+            [Nn])
+            ;;
+            *)
+              automake_check_func
+          esac
+        }
+        automake_check_func
         make -C ${automake_dir}/${automake_pkg} install
       ;;
       *)
         make -C ${automake_dir}/${automake_pkg} -j$(nproc)
-        make -C ${automake_dir}/${automake_pkg} -j$(nproc) check || true
+        echo -e "${warning}Running tests can take too long.${default}"
+        automake_check_func() {
+          read -p "Are you sure you want to check GNU Automake for sanity? (y/N)" automake_check
+          if [[ -z "$automake_check" ]]; then
+            automake_check=n
+          fi
+          case $automake_check in
+            [Yy])
+              make -C ${automake_dir}/$automake_pkg -j$(nproc) check || true
+            ;;
+            [Nn])
+            ;;
+            *)
+              automake_check_func
+          esac
+        }
+        automake_check_func
         make -C ${automake_dir}/${automake_pkg} -j$(nproc) install
     esac
     # Save progress
@@ -2694,13 +2978,45 @@ case $save_final_openssl in
     case $opt_one_job in
       1)
         make -C ${openssl_dir}/${openssl_pkg}
-        make -C ${openssl_dir}/${openssl_pkg} test || true
+        echo -e "${warning}Running tests can take too long and too much storage space.${default}"
+        openssl_check_func() {
+          read -p "Are you sure you want to check OpenSSL for sanity? (y/N)" openssl_check
+          if [[ -z "$openssl_check" ]]; then
+            openssl_check=n
+          fi
+          case $openssl_check in
+            [Yy])
+              make -C ${openssl_dir}/$openssl_pkg test || true
+            ;;
+            [Nn])
+            ;;
+            *)
+              openssl_check_func
+          esac
+        }
+        openssl_check_func
         sed -i '/INSTALL_LIBS/s/libcrypto.a libssl.a//' ${openssl_dir}/${openssl_pkg}/Makefile
         make -C ${openssl_dir}/${openssl_pkg} MANSUFFIX=ssl install
       ;;
       *)
         make -C ${openssl_dir}/${openssl_pkg} -j$(nproc)
-        make -C ${openssl_dir}/${openssl_pkg} HARNESS_JOBS=$(nproc) test || true
+        echo -e "${warning}Running tests can take too long and too much storage space.${default}"
+        openssl_check_func() {
+          read -p "Are you sure you want to check OpenSSL for sanity? (y/N)" openssl_check
+          if [[ -z "$openssl_check" ]]; then
+            openssl_check=n
+          fi
+          case $openssl_check in
+            [Yy])
+              make -C ${openssl_dir}/$openssl_pkg HARNESS_JOBS=$(nproc) test || true
+            ;;
+            [Nn])
+            ;;
+            *)
+              openssl_check_func
+          esac
+        }
+        openssl_check_func
         sed -i '/INSTALL_LIBS/s/libcrypto.a libssl.a//' ${openssl_dir}/${openssl_pkg}/Makefile
         make -C ${openssl_dir}/${openssl_pkg} -j$(nproc) MANSUFFIX=ssl install
     esac
@@ -2820,12 +3136,44 @@ case $save_final_libffi in
     case $opt_one_job in
       1)
         make -C ${libffi_dir}/${libffi_pkg}
-        make -C ${libffi_dir}/${libffi_pkg} check || true
+        echo -e "${warning}Running tests can take too long and too much storage space.${default}"
+        libffi_check_func() {
+          read -p "Are you sure you want to check Foreign Function Interface Library (Libffi) for sanity? (y/N)" libffi_check
+          if [[ -z "$libffi_check" ]]; then
+            libffi_check=n
+          fi
+          case $libffi_check in
+            [Yy])
+              make -C ${libffi_dir}/$libffi_pkg check || true
+            ;;
+            [Nn])
+            ;;
+            *)
+              libffi_check_func
+          esac
+        }
+        libffi_check_func
         make -C ${libffi_dir}/${libffi_pkg} install
       ;;
       *)
         make -C ${libffi_dir}/${libffi_pkg} -j$(nproc)
-        make -C ${libffi_dir}/${libffi_pkg} -j$(nproc) check || true
+        echo -e "${warning}Running tests can take too long and too much storage space.${default}"
+        libffi_check_func() {
+          read -p "Are you sure you want to check Foreign Function Interface Library (Libffi) for sanity? (y/N)" libffi_check
+          if [[ -z "$libffi_check" ]]; then
+            libffi_check=n
+          fi
+          case $libffi_check in
+            [Yy])
+              make -C ${libffi_dir}/$libffi_pkg -j$(nproc) check || true
+            ;;
+            [Nn])
+            ;;
+            *)
+              libffi_check_func
+          esac
+        }
+        libffi_check_func
         make -C ${libffi_dir}/${libffi_pkg} -j$(nproc) install
     esac
     # Save progress
@@ -2850,6 +3198,7 @@ case $save_final_python in
     python_dir=/sources/python
     python_pkg=$(ls $python_dir | grep .tar.xz)
     python_pkg=$(basename ${python_dir}/$python_pkg .tar.xz)
+    python_pkg=Python${python_pkg#python}
     # Clean up after previous build
     case $opt_one_job in
       1)
@@ -2964,6 +3313,49 @@ case $save_final_setuptools in
   ;;
   *)
     save-error "save_final_setuptools"
+esac
+
+# Ninja, a small build system with focus on speed
+if [[ -z "$save_final_ninja" ]]; then
+  save_final_ninja=0
+fi
+case $save_final_ninja in
+  1)
+  ;;
+  0)
+    ninja_dir=/sources/ninja
+    ninja_pkg=$(ls $ninja_dir | grep .tar.gz)
+    ninja_pkg=$(basename ${ninja_dir}/$ninja_pkg .tar.gz)
+    case $opt_one_job in
+      1)
+        export NINJAJOBS=1
+      ;;
+      *)
+        export NINJAJOBS=$(nproc)
+    esac
+    sed -i '/int Guess/a \
+            int  j = 0;\
+            char* jobs = getenv( "NINJAJOBS" );\
+            if ( jobs != NULL ) j = atoi( jobs );\
+            if ( j > 0 ) return j;\
+'           ${ninja_dir}/${ninja_pkg}/src/ninja.cc
+    pushd ${ninja_dir}/$ninja_pkg
+      python3 ${ninja_dir}/${ninja_pkg}/configure.py --bootstrap
+      ${ninja_dir}/${ninja_pkg}/ninja ninja_test
+      ${ninja_dir}/${ninja_pkg}/ninja_test --gtest_filter=-SubprocessTest.SetWithLots
+    popd
+    install -vm755  ${ninja_dir}/${ninja_pkg}/ninja                /usr/bin/
+    install -vDm644 ${ninja_dir}/${ninja_pkg}/misc/bash-completion /usr/share/bash-completion/completions/ninja
+    install -vDm644 ${ninja_dir}/${ninja_pkg}/misc/zsh-completion  /usr/share/zsh/site-functions/_ninja
+    # Save progress
+    echo "`sed '/save_final_ninja/d'  $fullsavename`" > $fullsavename
+    echo -e "save_final_ninja=1\n" >> $fullsavename
+    echo -e "${success}Ninja, a small build system with focus on speed successfully installed.${default}"
+    echo -e "${info}Removing ${ninja_dir}/${ninja_pkg}, please do not cancel this process...${default}"
+    rm -r ${ninja_dir}/${ninja_pkg} || true
+  ;;
+  *)
+    save-error "save_final_ninja"
 esac
 
 # Meson, a build system designed to be extremely fast and as user friendly as possible
@@ -3220,7 +3612,7 @@ case $save_final_findutils in
         make -C ${findutils_dir}/$findutils_pkg -j$(nproc) distclean || true
     esac
     pushd ${findutils_dir}/$findutils_pkg
-      ${fingutils_dir}/$findutils_pkg/configure --prefix=/usr \
+      ${findutils_dir}/$findutils_pkg/configure --prefix=/usr \
                                                 --localstatedir=/var/lib/locate
     popd
     case $opt_one_job in
@@ -3615,13 +4007,45 @@ case $save_final_tar in
     case $opt_one_job in
       1)
         make -C ${tar_dir}/$tar_pkg
-        make -C ${tar_dir}/$tar_pkg check || true
+        echo -e "${warning}Running tests can take too long and too much storage space.${default}"
+        tar_check_func() {
+          read -p "Are you sure you want to check GNU Tar for sanity? (y/N)" tar_check
+          if [[ -z "$tar_check" ]]; then
+            tar_check=n
+          fi
+          case $tar_check in
+            [Yy])
+              make -C ${tar_dir}/$tar_pkg check || true
+            ;;
+            [Nn])
+            ;;
+            *)
+              tar_check_func
+          esac
+        }
+        tar_check_func
         make -C ${tar_dir}/$tar_pkg install
         make -C ${tar_dir}/${tar_pkg}/doc install-html docdir=/usr/share/doc/$tar_pkg
       ;;
       *)
         make -C ${tar_dir}/$tar_pkg       -j$(nproc)
-        make -C ${tar_dir}/$tar_pkg       -j$(nproc) check || true
+        echo -e "${warning}Running tests can take too long and too much storage space.${default}"
+        tar_check_func() {
+          read -p "Are you sure you want to check GNU Tar for sanity? (y/N)" tar_check
+          if [[ -z "$tar_check" ]]; then
+            tar_check=n
+          fi
+          case $tar_check in
+            [Yy])
+              make -C ${tar_dir}/$tar_pkg -j$(nproc) check || true
+            ;;
+            [Nn])
+            ;;
+            *)
+              tar_check_func
+          esac
+        }
+        tar_check_func
         make -C ${tar_dir}/$tar_pkg       -j$(nproc) install
         make -C ${tar_dir}/${tar_pkg}/doc -j$(nproc) install-html docdir=/usr/share/doc/$tar_pkg
     esac
@@ -4544,6 +4968,7 @@ case $save_final_finish in
       read -p "Would you like to remove the /sources directory (Y/n)?" rm_source_dir
       if [[ -z "$rm_source_dir" ]]; then
         rm_source_dir=y
+      fi
       case $rm_source_dir in
         [Yy])
           rm -rv /sources || true

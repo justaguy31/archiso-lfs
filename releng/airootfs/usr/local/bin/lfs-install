@@ -520,7 +520,9 @@ case $save_build_preparation in
     done
     case $(uname -m) in
       x86_64)
-        mkdir -pv ${savelocation}/lib64
+        # I think the Book tells to create ${savelocation}/lib64, but the final Glibc build breaks because ldd is unable to locate ld-linux library
+        mkdir -pv ${savelocation}/usr/lib64
+        ln -sv ./usr/lib64 
       ;;
     esac
     mkdir -pv ${savelocation}/tools
@@ -955,14 +957,14 @@ case $save_target_glibc in
         ln -sfv ./ld-linux.so.2 ${savelocation}/lib/ld-lsb.so.3
       ;;
       x86_64)
-        ln -sfv ../lib/ld-linux-x86-64.so.2   ${savelocation}/lib64/ld-linux-x86-64.so.2
-        ln -sfv ../lib/ld-linux-x86-64.so.2   ${savelocation}/lib64/ld-lsb-x86-64.so.3
+        ln -sfv ../lib/ld-linux-x86-64.so.2   ${savelocation}/usr/lib64/ld-linux-x86-64.so.2
+        ln -sfv ../lib/ld-linux-x86-64.so.2   ${savelocation}/usr/lib64/ld-lsb-x86-64.so.3
       ;;
     esac
     pushd ${glibc_dir}/${glibc_pkg}
       patch -Np1 -i ${glibc_dir}/${glibc_pkg}/glibc-2.39-fhs-1.patch
     popd
-    echo "rootsbindir=${savelocation}/usr/sbin" > ${glibc_dir}/${glibc_pkg}/configparms
+    echo "rootsbindir=/usr/sbin" > ${glibc_dir}/${glibc_pkg}/configparms
     # Build and install
     mkdir -v ${glibc_dir}/build || true
     pushd ${glibc_dir}/build
@@ -985,24 +987,14 @@ case $save_target_glibc in
         make -C ${glibc_dir}/build -j$(nproc) DESTDIR=${savelocation} install
     esac
     sed '/RTLDLIST=/s@/usr@@g' -i ${savelocation}/usr/bin/ldd
-    # Glibc doesn't seem to create important symlinks by itself
-    ln    -sv   ./libBrokenLocale.so.1 ${savelocation}/usr/lib/libBrokenLocale.so || true
-    ln    -sv   ./libanl.so.1          ${savelocation}/usr/lib/libanl.so          || true
-    ln    -sv   ./libdl.so.2           ${savelocation}/usr/lib/libdl.so           || true
-    ln    -sv   ./libmvec.so.1         ${savelocation}/usr/lib/libmvec.so         || true
-    ln    -sv   ./libm.so.6            ${savelocation}/usr/lib/libm.so            || true
-    ln    -sv   ./libnsl.so.1          ${savelocation}/usr/lib/libnsl.so          || true
-    ln    -sv   ./libnss_compat.so.2   ${savelocation}/usr/lib/libnss_compat.so   || true
-    ln    -sv   ./libnss_db.so.2       ${savelocation}/usr/lib/libnss_db.so       || true
-    ln    -sv   ./libnss_dns.so.2      ${savelocation}/usr/lib/libnss_dns.so      || true
-    ln    -sv   ./libnss_files.so.2    ${savelocation}/usr/lib/libnss_files.so    || true
-    ln    -sv   ./libnss_hesiod.so.2   ${savelocation}/usr/lib/libnss_hesiod.so   || true
-    ln    -sv   ./libpthread.so.0      ${savelocation}/usr/lib/libpthread.so      || true
-    ln    -sv   ./libresolv.so.2       ${savelocation}/usr/lib/libresolv.so       || true
-    ln    -sv   ./librt.so.2           ${savelocation}/usr/lib/librt.so           || true
-    ln    -sv   ./libthread_db.so.1    ${savelocation}/usr/lib/libthread_db.so    || true
-    ln    -sv   ./libutil.so.1         ${savelocation}/usr/lib/libutil.so         || true
-    chmod a+rwx ${savelocation}/usr/lib/{libBrokenLocale.so,libanl.so,libdl.so,libmvec.so,libm.so,libnsl.so,libnss_compat.so,libnss_db.so,libnss_dns.so,libnss_files.so,libnss_hesiod.so,libpthread.so,libresolv.so,librt.so,libthread_db.so,libutil.so}
+    # The Book doesn't say anything about creating symlinks for these Glibc libraries, but they're indeed needed to build final Glibc
+    ln -sv ./libnsl.so.1       /usr/lib/libnsl.so       || true
+    ln -sv ./libnss_dns.so.2   /usr/lib/libnss_dns.so   || true
+    ln -sv ./libnss_files.so.2 /usr/lib/libnss_files.so || true
+    ln -sv ./librt.so.1        /usr/lib/librt.so        || true
+    ln -sv ./libutil.so.1      /usr/lib/libutil.so      || true
+    ln -sv ./libdl.so.2        /usr/lib/libdl.so        || true
+    ln -sv ./libpthread.so.0   /usr/lib/libpthread.so   || true
     # Save progress
     echo "`sed '/save_target_glibc/d'  $fullsavename`" > $fullsavename
     echo -e "save_target_glibc=1\n" >> $fullsavename
@@ -1295,7 +1287,8 @@ case $save_temp_coreutils in
     coreutils_dir=${savelocation}/sources/coreutils
     mkdir -pv $coreutils_dir
     coreutils_repo="https://ftp.gnu.org/gnu/coreutils/"
-    coreutils_latest=$(curl -s "${coreutils_repo}" | grep -Eo '(coreutils-[0-9]+([.][0-9]*)*)+.tar.xz' | sort -V | tail -1)
+    # Final patch requires this version
+    coreutils_latest=$(curl -s "${coreutils_repo}" | grep -Eo 'coreutils-9.4.tar.xz' | sort -V | tail -1)
     curl ${coreutils_repo}/$coreutils_latest --output ${coreutils_dir}/${coreutils_latest}
     checksum=`sha512sum ${coreutils_dir}/${coreutils_latest} | awk '{print $1}'`
     if [ "$checksum" != "`cat /etc/lfs-install/coreutils.sha512`" ]; then
@@ -2048,7 +2041,9 @@ case $save_temp_xz in
     # probably due to the backdoor in the latest versions.
     # I didn't want to clone repositories, but I guess I have to this time
     xz_repo=https://git.tukaani.org/xz.git
-    git clone --depth 1 --branch v5.4.6 $xz_repo || true
+    pushd ${xz_dir}
+      git clone --depth 1 --branch v5.4.6 $xz_repo || true
+    popd
 #    checksum=`sha512sum ${xz_dir}/xz-5.4.6.tar.xz | awk '{print $1}'`
 #    if [ "$checksum" != "`cat /etc/lfs-install/xz.sha512`" ]; then
 #      echo -e "${warning}Warning: the SHA-512 checksum of xz-5.4.6.tar.xz does not match the trusted one."
@@ -2078,7 +2073,7 @@ case $save_temp_xz in
 #    cd $OLDPWD
 #    xz_pkg=$(basename "${xz_dir}/xz-5.4.6.tar.xz" .tar.xz)
     xz_pkg=xz
-    echo -e "${warning}Warning: Xz Utils can only be git-cloned right now (see /usr/local/bin/lfs-install, line 2047), not veryfying the contents.${default}"
+    echo -e "${warning}Warning: Xz Utils can only be git-cloned right now (see /usr/local/bin/lfs-install, line 2029), not veryfying the contents.${default}"
     # Build & install
     mkdir -pv ${xz_dir}/build
     pushd ${xz_dir}/${xz_pkg}
@@ -2338,7 +2333,7 @@ case $save_temp_gcc in
       ;;
       *)
         make -C ${gcc_dir}/${gcc_pkg} -j$(nproc)
-        make -C ${gcc_dir}/${gcc_pkg} -j$(nproc) DESTDIR=$ install
+        make -C ${gcc_dir}/${gcc_pkg} -j$(nproc) DESTDIR=${savelocation} install
     esac
     ln -sv ./gcc ${savelocation}/usr/bin/cc
     # Save progress
@@ -2358,10 +2353,10 @@ case $save_chroot_ownership in
   1)
   ;;
   0)
-    chown -R root:root ${savelocation}/{usr,lib,var,etc,bin,sbin,tools}
+    chown -R root:root ${savelocation}/{usr,lib,lib64,var,etc,bin,sbin,tools}
     case $(uname -m) in
       x86_64)
-        chown -R root:root ${savelocation}/lib64 ;;
+        chown -R root:root ${savelocation}/usr/lib64 ;;
     esac
     # Save progress
     echo "`sed '/save_chroot_ownership/d'  $fullsavename`" > $fullsavename
@@ -2891,12 +2886,15 @@ case $save_download_final in
       }
       readline_patch_invalid_func
     fi
-    # GNU bc arbitrary precision numeric processing language
+    # bc arbitrary precision numeric processing language
+    # turns out this is not the GNU bc
     bc_dir=${savelocation}/sources/bc
     mkdir -pv $bc_dir
-    bc_repo="https://ftp.gnu.org/gnu/bc/"
-    bc_latest=$(curl -s "${bc_repo}" | grep -Eo '(bc-[0-9]+([.][0-9]*)*)+.tar.gz' | sort -V | tail -1)
-    curl ${bc_repo}/$bc_latest --output ${bc_dir}/${bc_latest}
+    bc_repo="https://github.com/gavinhoward/bc/releases/"
+    bc_latest=$(curl -s "${bc_repo}" | grep -Eo '(Release [0-9]+([.][0-9]*)*)+' | sort -V | tail -1)
+    bc_latest="${bc_latest#Release }"
+    curl --location ${bc_repo}/download/${bc_latest}/bc-${bc_latest}.tar.xz --output ${bc_dir}/bc-${bc_latest}.tar.xz
+    bc_latest=bc-${bc_latest}.tar.xz
     checksum=`sha512sum ${bc_dir}/${bc_latest} | awk '{print $1}'`
     if [ "$checksum" != "`cat /etc/lfs-install/bc.sha512`" ]; then
       echo -e "${warning}Warning: the SHA-512 checksum of $bc_latest does not match the trusted one."
@@ -4172,7 +4170,7 @@ case $save_download_final in
     kbd_pkg=$(basename ${kbd_dir}/${kbd_latest} .tar.xz)
     # Kbd Backspace/Delete Fix LFS patch
     kbd_patch_repo="https://www.linuxfromscratch.org/patches/lfs/12.1/kbd-2.6.4-backspace-1.patch"
-    kbd_patch_dir=$(basename "${kbd_dir}/$kbd_")
+    kbd_patch_dir=$kbd_pkg
     curl $kbd_patch_repo --output ${kbd_dir}/${kbd_patch_dir}/kbd-2.6.4-backspace-1.patch
     checksum=`sha512sum ${kbd_dir}/${kbd_patch_dir}/kbd-2.6.4-backspace-1.patch | awk '{print $1}'`
     if [ "$checksum" != "`cat /etc/lfs-install/kbd-patch.sha512`" ]; then
