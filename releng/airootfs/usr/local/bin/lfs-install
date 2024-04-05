@@ -324,6 +324,7 @@ case $save_partitions in
             parted --script $parteddevice mkpart  lfs-swap linux-swap 1MiB            $swapsize       || decide-swap-size
             parted --script $parteddevice mkpart  lfs      ext4       $swapsize       ${partedlfs}MiB || decide-swap-size
             parted --script $parteddevice mkpart  lfs-efi  fat32      ${partedlfs}MiB 100%
+            parted --script $parteddevice set     3        bios_grub  on
           ;;
           *)
             partitiontable-func
@@ -3906,7 +3907,7 @@ case $save_download_final in
     # Ninja, a small build system with a focus on speed
     ninja_dir=${savelocation}/sources/ninja
     mkdir -pv $ninja_dir
-    ninja_repo="https://files.pythonhosted.org/packages/37/2c/d717d13a413d6f7579cdaa1e28e6e2c98de95461549b08d311c8a5bf4c51/ninja-1.11.1.1.tar.gz"
+    ninja_repo="https://github.com/ninja-build/ninja/archive/v1.11.1/ninja-1.11.1.tar.gz"
     ninja_latest=ninja-1.11.1.tar.gz
     curl --location ${ninja_repo} --output ${ninja_dir}/${ninja_latest}
     checksum=`sha512sum ${ninja_dir}/${ninja_latest} | awk '{print $1}'`
@@ -4101,6 +4102,36 @@ case $save_download_final in
     echo -e "${info}Extracting $grub_latest contents...${default}"
     tar -xf ${grub_dir}/${grub_latest}
     cd $OLDPWD
+    grub_pkg=$(basename ${grub_dir}/$grub_latest .tar.xz)
+    # Unicode font data for GNU GRUB
+    unifont_dir=${grub_dir}/$grub_pkg
+    unifont_repo="https://unifoundry.com/pub/unifont/"
+    unifont_latest=$(curl -s "$unifont_repo" | grep -Eo '(iproute2-[0-9]+([.][0-9]*)*)+' | sort -V | tail -1)
+    curl ${unifont_repo}/${unifont_latest}/font-builds/${unifont_latest}.pcf.gz --output ${unifont_dir}/${unifont_latest}.pcf.gz
+    unifont_latest=${unifont_latest}.pcf.gz
+    checksum=`sha512sum ${unifont_dir}/$unifont_latest | awk '{print $1}'`
+    if [ "$checksum" != "`cat /etc/lfs-install/unifont.sha512`" ]; then
+      echo -e "${warning}Warning: the SHA-512 checksum of $unifont_latest does not match the trusted one."
+      echo    "This means the package was update recently, or the repository was attacked."
+      echo -e "The archive '$unifont_latest' might have malicious content inside.${default}"
+      unifont_invalid_func() {
+        read -p "Proceed anyway? (y,N):" unifont_invalid
+        if [[ -z "$unifont_invalid" ]]; then
+          unifont_invalid=n
+        fi
+        case $unifont_invalid in
+          [Yy])
+            echo -e "${warning}Keeping unstable (or unsafe) Unicode font data for GNU GRUB.${default}"
+          ;;
+          [Nn])
+            exit 1
+          ;;
+          *)
+            unifont_invalid_func
+        esac
+      }
+      unifont_invalid_func
+    fi
     # IPRoute2, Linux programs for IPV4-based networking
     iproute2_dir=${savelocation}/sources/iproute2
     mkdir -pv $iproute2_dir
