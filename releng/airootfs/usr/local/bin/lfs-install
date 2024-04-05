@@ -4106,7 +4106,7 @@ case $save_download_final in
     # Unicode font data for GNU GRUB
     unifont_dir=${grub_dir}/$grub_pkg
     unifont_repo="https://unifoundry.com/pub/unifont/"
-    unifont_latest=$(curl -s "$unifont_repo" | grep -Eo '(iproute2-[0-9]+([.][0-9]*)*)+' | sort -V | tail -1)
+    unifont_latest=$(curl -s "$unifont_repo" | grep -Eo '(unifont-[0-9]+([.][0-9]*)*)+' | sort -V | tail -1)
     curl ${unifont_repo}/${unifont_latest}/font-builds/${unifont_latest}.pcf.gz --output ${unifont_dir}/${unifont_latest}.pcf.gz
     unifont_latest=${unifont_latest}.pcf.gz
     checksum=`sha512sum ${unifont_dir}/$unifont_latest | awk '{print $1}'`
