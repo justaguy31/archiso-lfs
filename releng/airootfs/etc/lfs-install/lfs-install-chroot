@@ -3715,8 +3715,6 @@ case $save_final_grub in
     case $efi_mode in
       1)
         # Beyond Linux From Scratch GRUB
-        mkdir -pv /usr/share/fonts/unifont
-        gunzip -c ${grub_dir}/${grub_pkg}/$unifont_pkg > /usr/share/fonts/unifont/unifont.pcf
         unset {C,CPP,CXX,LD}FLAGS
         echo depends bli part_gpt > ${grub_dir}/${grub_pkg}/grub-core/extra_deps.lst
         # Prepare a 64-bit compiler
@@ -3752,7 +3750,6 @@ case $save_final_grub in
           ${grub_dir}/${grub_pkg}/configure --prefix=/usr        \
                                             --sysconfdir=/etc    \
                                             --disable-efiemu     \
-                                            --enable-grub-mkfont \
                                             --with-platform=efi  \
                                             --disable-werror
         popd
@@ -3769,6 +3766,7 @@ case $save_final_grub in
         mv -v /etc/bash_completion.d/grub /usr/share/bash-completion/completions
       ;;
       0)
+        # TODO: fix the build for BIOS support
         echo -e "${info}Building GNU GRand Unified Bootloader for BIOS support.${default}"
         unset {C,CPP,CXX,LD}FLAGS
         echo depends bli part_gpt > ${grub_dir}/${grub_pkg}/grub-core/extra_deps.lst
@@ -4870,7 +4868,6 @@ EOF
     echo '# file system  mount-point    type     options             dump  fsck'        >  /etc/fstab
     echo '#                                                                order'       >> /etc/fstab
     echo ''                                                                             >> /etc/fstab
-    echo "${savedevice}3      /boot          vfat    defaults            1     2" >> /etc/fstab
     echo "${savedevice}2      /              ext4     defaults            1     1" >> /etc/fstab
     echo "${savedevice}1      swap           swap     pri=1               0     0" >> /etc/fstab
     echo "proc           /proc          proc     nosuid,noexec,nodev 0     0"           >> /etc/fstab
@@ -5003,9 +5000,11 @@ case $save_final_linux in
     sed '/CONFIG_EFIVAR_FS/                          c\CONFIG_EFIVAR_FS=m'                          -i ${linux_dir}/$linux_pkg/.config
     sed '/CONFIG_NLS_CODEPAGE_437/                   c\CONFIG_NLS_CODEPAGE_437=y'                   -i ${linux_dir}/$linux_pkg/.config
     sed '/CONFIG_NLS_ISO8859_1/                      c\CONFIG_NLS_ISO8859_1=y'                      -i ${linux_dir}/$linux_pkg/.config
-    echo -e "${info}Make sure to have the following site opened somewhere (tty2, for example)"
+    echo -e "${info}Make sure to have the following sites opened somewhere (tty2, for example)"
     echo    "to ensure the system will be bootable:"
-    echo -e "https://linuxfromscratch.org/lfs/view/stable/chapter10/kernel.html ${default}"
+    echo    "https://linuxfromscratch.org/lfs/view/stable/chapter10/kernel.html"
+    echo    "https://www.linuxfromscratch.org/blfs/view/12.1/postlfs/grub-setup.html"
+    echo -e "If you don't know what to pick, accept the default, but ${warning}make sure the thing is not mentioned in the sites above!${default}"
     read -p "Press enter to continue."
     case $opt_one_job in
       1)
@@ -5016,8 +5015,7 @@ case $save_final_linux in
         make -C ${linux_dir}/$linux_pkg -j$(nproc)
         make -C ${linux_dir}/$linux_pkg -j$(nproc) modules_install
     esac
-    umount /boot || true
-    mount /boot
+    mkdir -pv /boot
     cp -iv ${linux_dir}/${linux_pkg}/arch/x86/boot/bzImage /boot/vmlinuz-${linux_pkg#linux-}-lfs-12.1
     cp -iv ${linux_dir}/${linux_pkg}/System.map            /boot/System.map-${linux_pkg#linux-}
     cp -iv ${linux_dir}/${linux_pkg}/.config               /boot/config-${linux_pkg#linux-}
@@ -5049,7 +5047,8 @@ case $save_final_boot in
     linux_pkg=$(basename ${linux_dir}/$linux_pkg .tar.xz)
     if [ -d /sys/firmware/efi ]; then
       mount --mkdir -v -t vfat ${savedevice}3 -o codepage=437,iocharset=iso8859-1 /boot/efi
-      echo "/dev/sda1 /boot/efi vfat codepage=437,iocharset=iso8859-1 0 1" >> /etc/fstab
+      echo "`sed '/vfat codepage=437/d' /etc/fstab`" > /etc/fstab
+      echo "/dev/sda3 /boot/efi vfat codepage=437,iocharset=iso8859-1 0 1" >> /etc/fstab
       grub-install --target=x86_64-efi --removable
       echo -e "${info}Creating /boot/grub/grub.cfg...${default}"
       echo 'set default=0'                                                               >  /boot/grub/grub.cfg
@@ -5057,7 +5056,7 @@ case $save_final_boot in
       echo ''                                                                            >> /boot/grub/grub.cfg
       echo 'insmod part_gpt'                                                             >> /boot/grub/grub.cfg
       echo 'insmod ext2'                                                                 >> /boot/grub/grub.cfg
-      echo 'set root=(hd0,3)'                                                            >> /boot/grub/grub.cfg
+      echo 'set root=(hd0,2)'                                                            >> /boot/grub/grub.cfg
       echo ''                                                                            >> /boot/grub/grub.cfg
       echo 'insmod all_video'                                                            >> /boot/grub/grub.cfg
       echo 'if loadfont /grub/fonts/unicode.pf2; then'                                   >> /boot/grub/grub.cfg
@@ -5065,7 +5064,7 @@ case $save_final_boot in
       echo 'fi'                                                                          >> /boot/grub/grub.cfg
       echo ''                                                                            >> /boot/grub/grub.cfg
       echo "menuentry \"GNU/Linux, Linux ${linux_pkg#linux-}-lfs-12.1\"  {"              >> /boot/grub/grub.cfg
-      echo "  linux   /vmlinuz-${linux_pkg#linux-}-lfs-12.1 root=${savedevice}2 ro"      >> /boot/grub/grub.cfg
+      echo "  linux   /boot/vmlinuz-${linux_pkg#linux-}-lfs-12.1 root=${savedevice}2 ro" >> /boot/grub/grub.cfg
       echo '}'                                                                           >> /boot/grub/grub.cfg
       echo ''                                                                            >> /boot/grub/grub.cfg
       echo 'menuentry "Firmware Setup" {'                                                >> /boot/grub/grub.cfg
@@ -5074,17 +5073,17 @@ case $save_final_boot in
     else
       grub-install ${savedevice}3
       echo -e "${info}Creating /boot/grub/grub.cfg...${default}"
-      echo 'set default=0'                                                                >  /boot/grub/grub.cfg
-      echo 'set timeout=5'                                                                >> /boot/grub/grub.cfg
-      echo ''                                                                             >> /boot/grub/grub.cfg
-      echo 'insmod part_gpt'                                                              >> /boot/grub/grub.cfg
-      echo 'insmod ext2'                                                                  >> /boot/grub/grub.cfg
-      echo 'set root=(hd0,3)'                                                             >> /boot/grub/grub.cfg
-      echo ''                                                                             >> /boot/grub/grub.cfg
-      echo "menuentry \"GNU/Linux, Linux ${linux_pkg#linux-}-lfs-12.1\" {"                >> /boot/grub/grub.cfg
-      echo "        linux   /vmlinuz-${linux_pkg#linux-}-lfs-12.1 root=${savedevice}2 ro" >> /boot/grub/grub.cfg
-      echo '}'
-    fi                                                                            >> /boot/grub/grub.cfg
+      echo 'set default=0'                                                                     >  /boot/grub/grub.cfg
+      echo 'set timeout=5'                                                                     >> /boot/grub/grub.cfg
+      echo ''                                                                                  >> /boot/grub/grub.cfg
+      echo 'insmod part_gpt'                                                                   >> /boot/grub/grub.cfg
+      echo 'insmod ext2'                                                                       >> /boot/grub/grub.cfg
+      echo 'set root=(hd0,2)'                                                                  >> /boot/grub/grub.cfg
+      echo ''                                                                                  >> /boot/grub/grub.cfg
+      echo "menuentry \"GNU/Linux, Linux ${linux_pkg#linux-}-lfs-12.1\" {"                     >> /boot/grub/grub.cfg
+      echo "        linux   /boot/vmlinuz-${linux_pkg#linux-}-lfs-12.1 root=${savedevice}2 ro" >> /boot/grub/grub.cfg
+      echo '}'                                                                                 >> /boot/grub/grub.cfg
+    fi
     # Save progress
     echo "`sed '/save_final_boot/d'  $fullsavename`" > $fullsavename
     echo -e "save_final_boot=1\n" >> $fullsavename
@@ -5139,7 +5138,6 @@ case $save_final_finish in
       echo -e "${info}You would like to log out of the chroot environment, power off,"
       echo -e "remove the installation image, and boot the Linux From Scratch system now.${default}"
       echo    "Issue the following to power off the installation image:"
-      echo    "logout"
       echo -e "systemctl poweroff${default}"
       exit 0
     fi

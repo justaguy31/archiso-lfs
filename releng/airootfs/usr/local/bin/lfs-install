@@ -4103,35 +4103,6 @@ case $save_download_final in
     tar -xf ${grub_dir}/${grub_latest}
     cd $OLDPWD
     grub_pkg=$(basename ${grub_dir}/$grub_latest .tar.xz)
-    # Unicode font data for GNU GRUB
-    unifont_dir=${grub_dir}/$grub_pkg
-    unifont_repo="https://unifoundry.com/pub/unifont/"
-    unifont_latest=$(curl -s "$unifont_repo" | grep -Eo '(unifont-[0-9]+([.][0-9]*)*)+' | sort -V | tail -1)
-    curl ${unifont_repo}/${unifont_latest}/font-builds/${unifont_latest}.pcf.gz --output ${unifont_dir}/${unifont_latest}.pcf.gz
-    unifont_latest=${unifont_latest}.pcf.gz
-    checksum=`sha512sum ${unifont_dir}/$unifont_latest | awk '{print $1}'`
-    if [ "$checksum" != "`cat /etc/lfs-install/unifont.sha512`" ]; then
-      echo -e "${warning}Warning: the SHA-512 checksum of $unifont_latest does not match the trusted one."
-      echo    "This means the package was update recently, or the repository was attacked."
-      echo -e "The archive '$unifont_latest' might have malicious content inside.${default}"
-      unifont_invalid_func() {
-        read -p "Proceed anyway? (y,N):" unifont_invalid
-        if [[ -z "$unifont_invalid" ]]; then
-          unifont_invalid=n
-        fi
-        case $unifont_invalid in
-          [Yy])
-            echo -e "${warning}Keeping unstable (or unsafe) Unicode font data for GNU GRUB.${default}"
-          ;;
-          [Nn])
-            exit 1
-          ;;
-          *)
-            unifont_invalid_func
-        esac
-      }
-      unifont_invalid_func
-    fi
     # IPRoute2, Linux programs for IPV4-based networking
     iproute2_dir=${savelocation}/sources/iproute2
     mkdir -pv $iproute2_dir
@@ -4669,6 +4640,24 @@ if [[ -z "$save_chroot" ]]; then
 fi
 case $save_chroot in
   1)
+    if [[ -z "$save_final_finish" ]]; then
+      save_final_finish=0
+    fi
+    case $save_final_finish in
+      1)
+        echo -e "${info}You would like to log out of the chroot environment, power off,"
+        echo -e "remove the installation image, and boot the Linux From Scratch system now."
+        echo    "Issue the following to power off the installation image:${default}"
+        echo -e "systemctl poweroff"
+        exit 0
+      ;;
+      0)
+        echo -e "${error}Error: \$save_chroot isn't equal to 1, but \$save_final_finish is.${default}"
+        exit 1
+      ;;
+      *)
+        save-error "save_final_finish"
+    esac
   ;;
   0)
     echo  -e    "${info}Copying /etc/lfs-install/lfs-install-chroot and the License to the chroot system...${default}"
