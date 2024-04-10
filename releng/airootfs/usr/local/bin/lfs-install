@@ -1,6 +1,6 @@
 #! /bin/bash
 # lfs-install - chroot enviornment installation
-# Copyright (C) 2023 Beloglazov Mark <justaguy3331@gmail.com>
+# Copyright (C) 2023-2024 Beloglazov Mark <justaguy3331@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify it under
 # the of the GNU General Public License as published by the Free Software
@@ -108,7 +108,7 @@ while true; do
   esac
 done
 
-echo "lfs-install Copyright (C) 2023 Beloglazov Mark <justaguy3331@gmail.com>
+echo "lfs-install Copyright (C) 2023-2024 Beloglazov Mark <justaguy3331@gmail.com>
 
 This program comes with ABSOLUTELY NO WARRANTY;
 for details use '-l' or '--license' options.
@@ -285,10 +285,9 @@ case $save_partitions in
     # https://wiki.archlinux.org/title/Partitioning
     if [ -d /sys/firmware/efi ]; then
       echo -e "${info}It appears that your machine has UEFI."
-      echo    "It is usually used with GPT partition table, however,"
-      echo    "there is an older firmware called BIOS, which instead supports only MBR."
-      echo    "UEFI can use that partition table for backwards compatibility,"
-      echo -e "but this is recommended to pick only if you need support for BIOS machines.${default}"
+      echo    "It is usually used with GUID Partition Table, however,"
+      echo    "there is an older firmware called BIOS, which is usually used with Master Boot Record."
+      echo -e "UEFI can use that partition table, but this is not recommended.${default}"
       partitiontable-func() {
         read -p "Would you like to use MBR partition table? (y/N)" partitiontable
         if [[ -z "$partitiontable" ]]; then
@@ -305,7 +304,10 @@ case $save_partitions in
           fi
         }
         mktable_err() {
-          echo -e "${error}Make sure the directory you are currently in ($(pwd)) isn't (in) the mountpoint."
+          echo -e "${error}If this error is related to a used chroot, please try to inspect the bug and report it here:"
+          echo -e "${info}https://github.com/justaguy31/archiso-lfs/issues"
+          echo -e "${error}You could also try fixing it yourself and pull a fix request here:"
+          echo -e "${info}https://github.com/justaguy31/archiso-lfs/pulls"
           exit 1
         }
         case $partitiontable in
@@ -324,7 +326,79 @@ case $save_partitions in
             parted --script $parteddevice mkpart  lfs-swap linux-swap 1MiB            $swapsize       || decide-swap-size
             parted --script $parteddevice mkpart  lfs      ext4       $swapsize       ${partedlfs}MiB || decide-swap-size
             parted --script $parteddevice mkpart  lfs-efi  fat32      ${partedlfs}MiB 100%
-            parted --script $parteddevice set     3        bios_grub  on
+          ;;
+          *)
+            partitiontable-func
+        esac
+      }
+      partitiontable-func
+      # Formatting the partitions
+      # https://wiki.archlinux.org/title/Installation_guide#Format_the_partitions
+      mkswap    --verbose ${parteddevice}1
+      mkfs.ext4 -v        ${parteddevice}2
+      mkfs.fat  -v -F 32  ${parteddevice}3
+    else
+      echo -e "${info}It appears that your machine has BIOS."
+      echo    "It is usually used with MBR partition table, however,"
+      echo    "there is a newer firmware called (U)EFI, which is usually used with GPT."
+      echo -e "The system can use this partition table for booting too.${default}"
+      partitiontable-func() {
+        read -p "Would you like to use GUID Partition Table? (y/N)" partitiontable
+        if [[ -z "$partitiontable" ]]; then
+          partitiontable=n
+        fi
+        decide-swap-size() {
+          echo -e "${info}Many machines need a swap partition (roughly pagefile)."
+          echo    "Swap partition is a disk space which is used by system when it's out of RAM."
+          echo    "It's a secondary storage for processes which is significantly worse by speed."
+          echo -e "The total amount of the system's RAM is `free -t -h | grep Total | awk '{print $2}'`B.${default}"
+          read -p "Choose the size of the swap partition (at least 5.5GB of total (RAM + swap) memory is required, IEC (*iB) units are also supported):" swapsize
+          if [[ -z "$swapsize" ]]; then
+            decide-swap-size
+          fi
+        }
+        mktable_err() {
+          echo -e "${error}If this error is related to a used chroot, please try to inspect the bug and report it here:"
+          echo -e "${info}https://github.com/justaguy31/archiso-lfs/issues"
+          echo -e "${error}You could also try fixing it yourself and pull a fix request here:"
+          echo -e "${info}https://github.com/justaguy31/archiso-lfs/pulls"
+          exit 1
+        }
+        case $partitiontable in
+          [Yy])
+            echo -e "${info}Using GUID Partition Table.${default}"
+            parted --script $parteddevice mktable gpt     || mktable_err
+            # Create a BIOS boot partition:
+            # n - add a new partition,
+            # partition number (1)
+            # first sector (default)
+            # last sector (default)
+            echo "n\n 1\n \n \n" | fdisk $parteddevice
+            # Change a partition type:
+            # partition number (1)
+            # partition type or alias (BIOS boot)
+            echo "t\n 1\n BIOS boot\n" | fdisk $parteddevice
+            decide-swap-size
+            parted --script $parteddevice mkpart  primary  linux-swap 2M              $swapsize       || decide-swap-size
+            parted --script $parteddevice mkpart  primary  ext4       $swapsize       ${partedlfs}MiB || decide-swap-size
+            parted --script $parteddevice mkpart  primary  fat32      ${partedlfs}MiB 100%
+            # Formatting the partitions
+            # https://wiki.archlinux.org/title/Installation_guide#Format_the_partitions
+            mkswap    --verbose ${parteddevice}2
+            mkfs.ext4 -v        ${parteddevice}3
+            mkfs.fat  -v -F 32  ${parteddevice}4
+          ;;
+          [Nn])
+            echo -e "${info}Using MBR partition table.${default}"
+            parted --script $parteddevice mktable msdos   || mktable_err
+            # There's no need to create a partition for BIOS when using MBR.
+            decide-swap-size
+            parted --script $parteddevice mkpart  lfs-swap linux-swap 1MiB            $swapsize       || decide-swap-size
+            parted --script $parteddevice mkpart  lfs      ext4       $swapsize       ${partedlfs}MiB || decide-swap-size
+            parted --script $parteddevice mkpart  lfs-efi  fat32      ${partedlfs}MiB 100%
+            mkswap    --verbose ${parteddevice}1
+            mkfs.ext4 -v        ${parteddevice}2
+            mkfs.fat  -v -F 32  ${parteddevice}3
           ;;
           *)
             partitiontable-func
@@ -332,11 +406,6 @@ case $save_partitions in
       }
       partitiontable-func
     fi
-    # Formatting the partitions
-    # https://wiki.archlinux.org/title/Installation_guide#Format_the_partitions
-    mkswap    --verbose ${parteddevice}1
-    mkfs.ext4 -v        ${parteddevice}2
-    mkfs.fat  -v -F 32  ${parteddevice}3
     if [ ! -z $opt_save_file ]; then
       if [ -f $opt_save_file ]; then
         # Remove all lines containing 'save_partitions'
@@ -2390,7 +2459,7 @@ case $save_virtual_filesystems in
     # Save progress
     echo "`sed '/save_virtual_filesystems/d'  $fullsavename`" > $fullsavename
     echo -e "save_virtual_filesystems=1\n" >> $fullsavename
-    echo -e "${success}Ownership routine in chroot is done.${default}"
+    echo -e "${success}Done mounting the virtual filesystems.${default}"
   ;;
   *)
     save-error "save_virtual_filesystems"
@@ -3734,7 +3803,7 @@ case $save_download_final in
     echo -e "${info}Extracting $kmod_latest contents...${default}"
     tar -xf ${kmod_dir}/${kmod_latest}
     cd $OLDPWD
-    # GNU Elfutils (only Libelf will be installed, Elfutils seems to be fully installed only in Beyond Linux From Scratch)
+    # Elfutils (only Libelf will be installed, Elfutils seems to be fully installed only in Beyond Linux From Scratch)
     elfutils_dir=${savelocation}/sources/elfutils
     mkdir -pv $elfutils_dir
     # Fixed version
