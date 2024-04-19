@@ -379,9 +379,9 @@ case $save_partitions in
             # partition type or alias (BIOS boot)
             echo "t\n 1\n BIOS boot\n" | fdisk $parteddevice
             decide-swap-size
-            parted --script $parteddevice mkpart  primary  linux-swap 2M              $swapsize       || decide-swap-size
-            parted --script $parteddevice mkpart  primary  ext4       $swapsize       ${partedlfs}MiB || decide-swap-size
-            parted --script $parteddevice mkpart  primary  fat32      ${partedlfs}MiB 100%
+            parted --script $parteddevice mkpart  lfs-swap linux-swap 2M              $swapsize       || decide-swap-size
+            parted --script $parteddevice mkpart  lfs      ext4       $swapsize       ${partedlfs}MiB || decide-swap-size
+            parted --script $parteddevice mkpart  lfs-efi  fat32      ${partedlfs}MiB 100%
             # Formatting the partitions
             # https://wiki.archlinux.org/title/Installation_guide#Format_the_partitions
             mkswap    --verbose ${parteddevice}2
@@ -393,9 +393,9 @@ case $save_partitions in
             parted --script $parteddevice mktable msdos   || mktable_err
             # There's no need to create a partition for BIOS when using MBR.
             decide-swap-size
-            parted --script $parteddevice mkpart  lfs-swap linux-swap 1MiB            $swapsize       || decide-swap-size
-            parted --script $parteddevice mkpart  lfs      ext4       $swapsize       ${partedlfs}MiB || decide-swap-size
-            parted --script $parteddevice mkpart  lfs-efi  fat32      ${partedlfs}MiB 100%
+            parted --script $parteddevice mkpart  primary  linux-swap 1MiB            $swapsize       || decide-swap-size
+            parted --script $parteddevice mkpart  primary  ext4       $swapsize       ${partedlfs}MiB || decide-swap-size
+            parted --script $parteddevice mkpart  primary  fat32      ${partedlfs}MiB 100%
             mkswap    --verbose ${parteddevice}1
             mkfs.ext4 -v        ${parteddevice}2
             mkfs.fat  -v -F 32  ${parteddevice}3
@@ -592,7 +592,7 @@ case $save_build_preparation in
       x86_64)
         # I think the Book tells to create ${savelocation}/lib64, but the final Glibc build breaks because ldd is unable to locate ld-linux library
         mkdir -pv ${savelocation}/usr/lib64
-        ln -sv ./usr/lib64 
+        ln -sv ./usr/lib64 ${savelocation}/lib64
       ;;
     esac
     mkdir -pv ${savelocation}/tools
@@ -967,7 +967,7 @@ case $save_target_glibc in
     mkdir -pv $glibc_dir
     glibc_repo="https://ftp.gnu.org/gnu/glibc/"
     patch_repo="https://www.linuxfromscratch.org/patches/lfs/12.1/glibc-2.39-fhs-1.patch"
-    glibc_latest=$(curl -s "${glibc_repo}" | grep -Eo '(glibc-[0-9]+([.][0-9]*)*)+.tar.xz' | sort -V | tail -1)
+    glibc_latest=glibc-2.39.tar.xz
     curl ${glibc_repo}/$glibc_latest --output ${glibc_dir}/${glibc_latest}
     pkg_checksum=`sha512sum ${glibc_dir}/${glibc_latest} | awk '{print $1}'`
     if [ "$pkg_checksum" != "`cat /etc/lfs-install/glibc.sha512`" ]; then
@@ -1058,13 +1058,13 @@ case $save_target_glibc in
     esac
     sed '/RTLDLIST=/s@/usr@@g' -i ${savelocation}/usr/bin/ldd
     # The Book doesn't say anything about creating symlinks for these Glibc libraries, but they're indeed needed to build final Glibc
-    ln -sv ./libnsl.so.1       /usr/lib/libnsl.so       || true
-    ln -sv ./libnss_dns.so.2   /usr/lib/libnss_dns.so   || true
-    ln -sv ./libnss_files.so.2 /usr/lib/libnss_files.so || true
-    ln -sv ./librt.so.1        /usr/lib/librt.so        || true
-    ln -sv ./libutil.so.1      /usr/lib/libutil.so      || true
-    ln -sv ./libdl.so.2        /usr/lib/libdl.so        || true
-    ln -sv ./libpthread.so.0   /usr/lib/libpthread.so   || true
+    ln -sv ./libnsl.so.1       ${savelocation}/usr/lib/libnsl.so       || true
+    ln -sv ./libnss_dns.so.2   ${savelocation}/usr/lib/libnss_dns.so   || true
+    ln -sv ./libnss_files.so.2 ${savelocation}/usr/lib/libnss_files.so || true
+    ln -sv ./librt.so.1        ${savelocation}/usr/lib/librt.so        || true
+    ln -sv ./libutil.so.1      ${savelocation}/usr/lib/libutil.so      || true
+    ln -sv ./libdl.so.2        ${savelocation}/usr/lib/libdl.so        || true
+    ln -sv ./libpthread.so.0   ${savelocation}/usr/lib/libpthread.so   || true
     # Save progress
     echo "`sed '/save_target_glibc/d'  $fullsavename`" > $fullsavename
     echo -e "save_target_glibc=1\n" >> $fullsavename
@@ -1289,7 +1289,7 @@ case $save_temp_bash in
     bash_dir=${savelocation}/sources/bash
     mkdir -pv $bash_dir
     bash_repo="https://ftp.gnu.org/gnu/bash/"
-    bash_latest=$(curl -s "${bash_repo}" | grep -Eo '(bash-[0-9]+([.][0-9]*)*)+.tar.gz' | sort -V | tail -1)
+    bash_latest=bash-5.2.21.tar.gz
     curl ${bash_repo}/$bash_latest --output ${bash_dir}/${bash_latest}
     checksum=`sha512sum ${bash_dir}/${bash_latest} | awk '{print $1}'`
     if [ "$checksum" != "`cat /etc/lfs-install/bash.sha512`" ]; then
@@ -1358,7 +1358,7 @@ case $save_temp_coreutils in
     mkdir -pv $coreutils_dir
     coreutils_repo="https://ftp.gnu.org/gnu/coreutils/"
     # Final patch requires this version
-    coreutils_latest=$(curl -s "${coreutils_repo}" | grep -Eo 'coreutils-9.4.tar.xz' | sort -V | tail -1)
+    coreutils_latest=coreutils-9.4.tar.xz
     curl ${coreutils_repo}/$coreutils_latest --output ${coreutils_dir}/${coreutils_latest}
     checksum=`sha512sum ${coreutils_dir}/${coreutils_latest} | awk '{print $1}'`
     if [ "$checksum" != "`cat /etc/lfs-install/coreutils.sha512`" ]; then
@@ -2900,7 +2900,7 @@ case $save_download_final in
     readline_dir=${savelocation}/sources/readline
     mkdir -pv $readline_dir
     readline_repo="https://ftp.gnu.org/gnu/readline/"
-    readline_latest=$(curl -s "${readline_repo}" | grep -Eo '(readline-[0-9]+([.][0-9]*)*)+.tar.gz' | sort -V | tail -1)
+    readline_latest=readline-8.2.tar.gz
     curl ${readline_repo}/$readline_latest --output ${readline_dir}/${readline_latest}
     checksum=`sha512sum ${readline_dir}/${readline_latest} | awk '{print $1}'`
     if [ "$checksum" != "`cat /etc/lfs-install/readline.sha512`" ]; then
@@ -2977,7 +2977,7 @@ case $save_download_final in
         fi
         case $bc_invalid in
           [Yy])
-            echo -e "${warning}Keeping unstable (or unsafe) GNU bc arbitrary precision numeric processing language.${default}"
+            echo -e "${warning}Keeping unstable (or unsafe) bc arbitrary precision numeric processing language.${default}"
           ;;
           [Nn])
             exit 1
@@ -4209,7 +4209,7 @@ case $save_download_final in
     kbd_dir=${savelocation}/sources/kbd
     mkdir -pv $kbd_dir
     kbd_repo="https://mirrors.edge.kernel.org/pub/linux/utils/kbd/"
-    kbd_latest=$(curl -s "${kbd_repo}" | grep -Eo '(kbd-[0-9]+([.][0-9]*)*)+.tar.xz' | sort -V | tail -1)
+    kbd_latest=kbd-2.6.4.tar.xz
     curl ${kbd_repo}/$kbd_latest --output ${kbd_dir}/${kbd_latest}
     checksum=`sha512sum ${kbd_dir}/${kbd_latest} | awk '{print $1}'`
     if [ "$checksum" != "`cat /etc/lfs-install/kbd.sha512`" ]; then
@@ -4704,10 +4704,12 @@ case $save_download_final in
 esac
 
 # Perform lfs-install routines to continue installing in chroot
-if [[ -z "$save_chroot" ]]; then
-  save_chroot=0
+# This previously was "save_chroot", but it had to be renamed
+# due to sed removing *all* lines containing "save_chroot"
+if [[ -z "$save_enter_chroot" ]]; then
+  save_enter_chroot=0
 fi
-case $save_chroot in
+case $save_enter_chroot in
   1)
     if [[ -z "$save_final_finish" ]]; then
       save_final_finish=0
@@ -4715,13 +4717,13 @@ case $save_chroot in
     case $save_final_finish in
       1)
         echo -e "${info}You would like to log out of the chroot environment, power off,"
-        echo -e "remove the installation image, and boot the Linux From Scratch system now."
-        echo    "Issue the following to power off the installation image:${default}"
-        echo -e "systemctl poweroff"
+        echo    "remove the installation image, and boot the Linux From Scratch system now."
+        echo -e "Issue the following to power off the installation image:${default}"
+        echo    "systemctl poweroff"
         exit 0
       ;;
       0)
-        echo -e "${error}Error: \$save_chroot isn't equal to 1, but \$save_final_finish is.${default}"
+        echo -e "${error}Error: \$save_enter_chroot isn't equal to 1, but \$save_final_finish is.${default}"
         exit 1
       ;;
       *)
@@ -4739,8 +4741,8 @@ case $save_chroot in
     chmod a+rwx ${savelocation}/usr/bin/bash-pager
     echo  -e    "${info}Saving progress...${default}"
     # Save progress
-    echo "`sed '/save_chroot/d'  $fullsavename`" > $fullsavename
-    echo -e "save_chroot=1\n" >> $fullsavename
+    echo "`sed '/save_enter_chroot/d'  $fullsavename`" > $fullsavename
+    echo -e "save_enter_chroot=1\n" >> $fullsavename
     echo -e "${success}Done!${default}"
     echo -e "${info}Entering the chroot (your future system) environment.${default}"
     chroot "$savelocation" /usr/bin/env -i                              \
@@ -4755,5 +4757,5 @@ case $save_chroot in
                            /bin/bash --login /usr/bin/lfs-install-chroot
   ;;
   *)
-    save-error "save_chroot"
+    save-error "save_enter_chroot"
 esac

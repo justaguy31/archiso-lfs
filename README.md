@@ -1,6 +1,7 @@
 # archiso-lfs
-Previous test (need another):  
-![Static Badge](https://img.shields.io/badge/possible%20initramfs%20malfunction%20(malicious%20xz)-yellow?label=ISO%20build) ![Static Badge](https://img.shields.io/badge/fail-red?label=lfs-install) ![Static Badge](https://img.shields.io/badge/fail-red?label=LFS%20boot%20(BIOS)) ![Static Badge](https://img.shields.io/badge/pass-green?label=LFS%20boot%20(UEFI))
+
+Previous run:  
+![Static Badge](https://img.shields.io/badge/possible%20initramfs%20malfunction%20-yellow?label=ISO%20build) ![Static Badge](https://img.shields.io/badge/fail-red?label=lfs-install) ![Static Badge](https://img.shields.io/badge/pass-green?label=LFS%20boot%20(BIOS)) ![Static Badge](https://img.shields.io/badge/unchanged%20(pass)-green?label=LFS%20boot%20(UEFI))
 
 Just a school project based on [Linux From Scratch](https://linuxfromscratch.org/lfs/view/stable/index.html).  
 
